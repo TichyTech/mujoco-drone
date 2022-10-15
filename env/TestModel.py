@@ -1,3 +1,4 @@
+import mujoco
 import numpy as np
 from gym import utils
 from .mujoco_env_custom import extendedEnv
@@ -52,7 +53,7 @@ class TestEnv(extendedEnv, utils.EzPickle):
 
     def reset_model(self):
         qpos = self.init_qpos + self.np_random.uniform(
-            size=self.model.nq, low=-0.01, high=0.01
+            size=self.model.nq, low=-0.03, high=0.03
         )
         qvel = self.init_qvel + self.np_random.uniform(
             size=self.model.nv, low=-0.01, high=0.01
@@ -65,6 +66,12 @@ class TestEnv(extendedEnv, utils.EzPickle):
         for i in range(self.num_drones):
             rgb = self._get_viewer("human").render_to_array(cam_id=i)
             images.append(rgb)
+        ncol = self.data.ncon  # number of collisions
+        print('%d collisions' % ncol)
+        for i in range(ncol):
+            con = self.data.contact[i]
+            print('geom1', con.geom1, mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, con.geom1,))
+            print('geom2', con.geom2, mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, con.geom2,))
         return {'pos': self.data.qpos, 'vel': self.data.qvel, 'rgbs': np.array(images)}
 
     def viewer_setup(self):
