@@ -45,16 +45,21 @@ def make_drone(id=0, hue=1):
 
 def make_arena(num_drones=1):
     arena = mjcf.RootElement(model='arena')
+    arena.size.nconmax = 1000  # set maximum number of collisions
+    arena.size.njmax = 2000  # increase the maximum number of constraints
+
     chequered = arena.asset.add('texture', name='checker', type='2d', builtin='checker', width=300,
                                 height=300, rgb1=[.2, .3, .4], rgb2=[.3, .4, .5])
     grid = arena.asset.add('material', name='grid', texture=chequered,
                            texrepeat=[5, 5], reflectance=.2)
-    arena.worldbody.add('geom', name='floor', type='plane', size=[10, 10, .1], material=grid)
+    arena.asset.add('texture', name='skybox', type='skybox', builtin='gradient',
+                    rgb1=(.4, .6, .8), rgb2=(0, 0, 0), width=800, height=800)
+    arena.worldbody.add('geom', name='floor', type='plane', size=[10, 10, 0.5], material=grid)
     arena.worldbody.add('light', name='light', pos=[0, 0, 3], cutoff=100, dir=[0, 0, -1.3])
 
     drones = [make_drone(i, i/num_drones) for i in range(num_drones)]
     height = .15
-    margin = 0.2
+    margin = 0.5
     sz = np.ceil(np.sqrt(num_drones)).astype(np.long)
     steps = (np.arange(sz) - (sz-1)/2) * margin
     xpos, ypos, zpos = np.meshgrid(steps, steps, [height])
@@ -67,7 +72,7 @@ def make_arena(num_drones=1):
 
 def mjcf_to_mjmodel(mjcf_model):
     xml_string = mjcf_model.to_xml_string(precision=5)
-    print(xml_string)
+    # print(xml_string)
     # assets = arena.get_assets()
     model = mujoco.MjModel.from_xml_string(xml_string)
     return model

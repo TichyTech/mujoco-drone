@@ -62,15 +62,15 @@ class DronesEnv(extendedEnv, utils.EzPickle):
 
     def _get_obs(self):
         images = []
-        for i in range(self.num_drones):
-            rgb = self._get_viewer("human").render_to_array(cam_id=i)
-            images.append(rgb)
-        ncol = self.data.ncon  # number of collisions
-        print('%d collisions' % ncol)
-        for i in range(ncol):
-            con = self.data.contact[i]
-            print('geom1', con.geom1, mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, con.geom1,))
-            print('geom2', con.geom2, mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, con.geom2,))
+        # for i in range(self.num_drones):
+        #     rgb = self._get_viewer("human").render_to_array(cam_id=i)
+        #     images.append(rgb)
+        # ncol = self.data.ncon  # number of collisions
+        # print('%d collisions' % ncol)
+        # for i in range(ncol):
+        #     con = self.data.contact[i]
+        #     print('geom1', con.geom1, mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, con.geom1,))
+        #     print('geom2', con.geom2, mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, con.geom2,))
         return {'pos': self.data.qpos, 'vel': self.data.qvel, 'rgbs': np.array(images)}
 
     def viewer_setup(self):
