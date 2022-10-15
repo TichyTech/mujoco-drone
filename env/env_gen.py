@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib.colors import hsv_to_rgb
 from dm_control import mjcf
 from dm_control import mujoco
+from dm_control.mjcf import constants
 
 
 def make_drone(id=0, hue=1):
@@ -21,6 +22,7 @@ def make_drone(id=0, hue=1):
     model.default.geom.type = 'box'
     model.default.geom.rgba = rgba
     model.default.geom.conaffinity = 0
+    model.default.geom.contype = 1
     model.default.geom.condim = 3
     model.default.geom.friction = (1, 0.5, 0.5)
     model.default.geom.margin = 0
@@ -52,8 +54,9 @@ def make_arena(num_drones=1):
 
     drones = [make_drone(i, i/num_drones) for i in range(num_drones)]
     height = .15
+    margin = 0.2
     sz = np.ceil(np.sqrt(num_drones)).astype(np.long)
-    steps = (np.arange(sz) - (sz-1)/2)*0.5
+    steps = (np.arange(sz) - (sz-1)/2) * margin
     xpos, ypos, zpos = np.meshgrid(steps, steps, [height])
     for i, model in enumerate(drones):
         spawn_pos = (xpos.flat[i], ypos.flat[i], zpos.flat[i])
@@ -63,7 +66,7 @@ def make_arena(num_drones=1):
 
 
 def mjcf_to_mjmodel(mjcf_model):
-    xml_string = mjcf_model.to_xml_string()
+    xml_string = mjcf_model.to_xml_string(precision=5)
     print(xml_string)
     # assets = arena.get_assets()
     model = mujoco.MjModel.from_xml_string(xml_string)

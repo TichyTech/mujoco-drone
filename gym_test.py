@@ -12,7 +12,7 @@ observation, info = env.reset(seed=42)
 print(mujoco.MjData(env.model).ctrl)
 
 for _ in range(2000):
-    action = np.ones((4*num_drones, ))*0.1
+    action = np.ones((4*num_drones, ))*0.7
     observation, reward, terminated, truncated, info = env.step(action)
     # print(observation)
     if terminated or truncated:
