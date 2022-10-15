@@ -52,13 +52,13 @@ def make_arena(num_drones=1):
 
     drones = [make_drone(i, i/num_drones) for i in range(num_drones)]
     height = .15
-    grid = 0.5
-    xpos, ypos, zpos = np.meshgrid([-grid, 0, grid], [0, grid], [height])
+    sz = np.ceil(np.sqrt(num_drones)).astype(np.long)
+    steps = (np.arange(sz) - (sz-1)/2)*0.5
+    xpos, ypos, zpos = np.meshgrid(steps, steps, [height])
     for i, model in enumerate(drones):
         spawn_pos = (xpos.flat[i], ypos.flat[i], zpos.flat[i])
         spawn_site = arena.worldbody.add('site', pos=spawn_pos, group=3)
         spawn_site.attach(model).add('freejoint')
-
     return arena
 
 

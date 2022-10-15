@@ -1,9 +1,9 @@
 import numpy as np
 from gym import utils
 from .mujoco_env_custom import extendedEnv
-from gym.spaces import Box
 from .env_gen import make_arena, mjcf_to_mjmodel
 random_state = np.random.RandomState(42)
+from gym.spaces import Dict, Box
 
 
 class TestEnv(extendedEnv, utils.EzPickle):
@@ -19,21 +19,33 @@ class TestEnv(extendedEnv, utils.EzPickle):
 
     def __init__(self, num_drones=1, **kwargs):
         utils.EzPickle.__init__(self, **kwargs)
-        observation_space = Box(low=-np.inf, high=np.inf, shape=(4,), dtype=np.float64)
-        model = mjcf_to_mjmodel(make_arena(num_drones))
+        width, height = 640, 480
+        self.num_drones = num_drones
+        observation_space = Dict({
+            'pos': Box(low=-np.inf, high=np.inf, shape=(self.num_drones*7, ), dtype=np.float64),
+            'vel': Box(low=-np.inf, high=np.inf, shape=(self.num_drones*6, ), dtype=np.float64),
+            'rgbs': Box(low=0, high=255, shape=(self.num_drones, width, height, 3), dtype=np.uint8)
+        })
+        model = mjcf_to_mjmodel(make_arena(self.num_drones))
         extendedEnv.__init__(
             self,
             model,
             1,
             observation_space=observation_space,
+            width=width,
+            height=height,
             **kwargs
         )
+        self.terminated = np.zeros((self.num_drones, ))
 
     def step(self, a):
         reward = 1.0
         self.do_simulation(a, self.frame_skip)
         ob = self._get_obs()
-        terminated = bool(not np.isfinite(ob).all() or (np.abs(ob[1]) > 0.2))
+        positions = ob['pos']
+        for i in range(self.num_drones):
+            self.terminated[i] = positions[i*7 + 2] > 5
+        terminated = self.terminated.all()
         if self.render_mode == "human":
             self.render()
         return ob, reward, terminated, False, {}
@@ -49,13 +61,13 @@ class TestEnv(extendedEnv, utils.EzPickle):
         return self._get_obs()
 
     def _get_obs(self):
-        rgb = self._get_viewer("human").render_to_array(cam_id=0)
-
-        print('qs', self.data.qpos)
-        print('vs', self.data.qvel)
-        print('sense', self.data.sensordata)
-        print(rgb.shape)
-        return np.concatenate([self.data.qpos, self.data.qvel]).ravel()
+        images = []
+        for i in range(self.num_drones):
+            rgb = self._get_viewer("human").render_to_array(cam_id=i)
+            images.append(rgb)
+        print(self.data.qpos.shape)
+        print(self.data.qvel.shape)
+        return {'pos': self.data.qpos, 'vel': self.data.qvel, 'rgbs': np.array(images)}
 
     def viewer_setup(self):
         assert self.viewer is not None

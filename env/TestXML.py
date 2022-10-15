@@ -1,11 +1,11 @@
 import numpy as np
 
 from gym import utils
-from gym.envs.mujoco.mujoco_env import MujocoEnv
+from .mujoco_env_custom import extendedEnv
 from gym.spaces import Box
 
 
-class TestEnvXML(MujocoEnv, utils.EzPickle):
+class TestEnvXML(extendedEnv, utils.EzPickle):
 
     metadata = {
         "render_modes": [
@@ -13,15 +13,15 @@ class TestEnvXML(MujocoEnv, utils.EzPickle):
             "rgb_array",
             "depth_array",
         ],
-        "render_fps": 500,
+        "render_fps": 100,
     }
 
     def __init__(self, **kwargs):
         utils.EzPickle.__init__(self, **kwargs)
         observation_space = Box(low=-np.inf, high=np.inf, shape=(4,), dtype=np.float64)
-        MujocoEnv.__init__(
+        extendedEnv.__init__(
             self,
-            "test.xml",
+            "broken.xml",
             1,
             observation_space=observation_space,
             **kwargs
