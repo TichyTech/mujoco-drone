@@ -29,9 +29,9 @@ def make_drone(id=0, hue=1):
 
     model.worldbody.add('geom', name='core_geom', size=(0.04, 0.04, 0.02), mass=0.1, rgba=rgba)
     model.worldbody.add('site', name='sense', pos=(0, 0, -0.01))
-    model.sensor.add('accelerometer', site='sense')
-    model.sensor.add('gyro', site='sense')
-    model.sensor.add('magnetometer', site='sense')
+    model.sensor.add('accelerometer', name='acc_%d', site='sense')
+    model.sensor.add('gyro', name='gyro_%d', site='sense')
+    model.sensor.add('magnetometer', name='mag_%d', site='sense')
     model.worldbody.add('camera', name='dronecam_%d' % id, pos=(0.02, 0, 0.01))
     for i in range(4):
         theta = 2 * i * np.pi / 4
