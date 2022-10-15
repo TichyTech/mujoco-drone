@@ -1,7 +1,7 @@
 import numpy as np
 
 from gym import utils
-from .mujoco_env_custom import MujocoEnv
+from gym.envs.mujoco.mujoco_env import MujocoEnv
 from gym.spaces import Box
 
 
