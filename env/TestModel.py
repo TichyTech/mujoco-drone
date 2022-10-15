@@ -24,7 +24,7 @@ class TestEnv(extendedEnv, utils.EzPickle):
         observation_space = Dict({
             'pos': Box(low=-np.inf, high=np.inf, shape=(self.num_drones*7, ), dtype=np.float64),
             'vel': Box(low=-np.inf, high=np.inf, shape=(self.num_drones*6, ), dtype=np.float64),
-            'rgbs': Box(low=0, high=255, shape=(self.num_drones, width, height, 3), dtype=np.uint8)
+            'rgbs': Box(low=0, high=255, shape=(self.num_drones, height, width, 3), dtype=np.uint8)
         })
         model = mjcf_to_mjmodel(make_arena(self.num_drones))
         extendedEnv.__init__(
@@ -65,8 +65,6 @@ class TestEnv(extendedEnv, utils.EzPickle):
         for i in range(self.num_drones):
             rgb = self._get_viewer("human").render_to_array(cam_id=i)
             images.append(rgb)
-        print(self.data.qpos.shape)
-        print(self.data.qvel.shape)
         return {'pos': self.data.qpos, 'vel': self.data.qvel, 'rgbs': np.array(images)}
 
     def viewer_setup(self):
