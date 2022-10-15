@@ -3,11 +3,10 @@ import numpy as np
 from gym import utils
 from .mujoco_env_custom import extendedEnv
 from .env_gen import make_arena, mjcf_to_mjmodel
-random_state = np.random.RandomState(42)
 from gym.spaces import Dict, Box
 
 
-class TestEnv(extendedEnv, utils.EzPickle):
+class DronesEnv(extendedEnv, utils.EzPickle):
 
     metadata = {
         "render_modes": [

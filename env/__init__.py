@@ -7,7 +7,7 @@ register(
 )
 
 register(
-    id="TestModel",
+    id="Drones",
     max_episode_steps=1000,
-    entry_point="env.TestModel:TestEnv",
+    entry_point="env.Drones:DronesEnv",
 )
