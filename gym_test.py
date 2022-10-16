@@ -5,7 +5,7 @@ import numpy as np
 camera_width, camera_hight = 240, 240
 num_drones = 64
 
-env = gym.make("Drones", num_drones=num_drones, render_mode="human")
+env = envs.Drones.DronesEnv(num_drones=num_drones, render_mode="human")
 observation, info = env.reset(seed=42)
 
 for _ in range(2000):
