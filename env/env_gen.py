@@ -53,7 +53,7 @@ def make_arena(num_drones=1):
     grid = arena.asset.add('material', name='grid', texture=chequered,
                            texrepeat=[5, 5], reflectance=.2)
     arena.asset.add('texture', name='skybox', type='skybox', builtin='gradient',
-                    rgb1=(.4, .6, .8), rgb2=(0, 0, 0), width=800, height=800)
+                    rgb1=(.4, .6, .8), rgb2=(0, 0, 0), width=800, height=800, mark="random", markrgb=(1, 1, 1))
     arena.worldbody.add('geom', name='floor', type='plane', size=[10, 10, 0.5], material=grid)
     arena.worldbody.add('light', name='light', pos=[0, 0, 3], cutoff=100, dir=[0, 0, -1.3])
 
