@@ -1,11 +1,12 @@
 from gym.envs.mujoco.mujoco_rendering import Viewer
 from gym.envs.mujoco.mujoco_env import MujocoEnv
+from .mujoco_vecenv import MujocoEnv
 import mujoco
 import numpy as np
 from typing import Union, Optional
 from gym.spaces import Space
 from os import path
-
+import gym
 
 DEFAULT_HEIGHT = 480
 DEFAULT_WIDTH = 640
@@ -82,11 +83,57 @@ class extendedEnv(MujocoEnv):
         ), f'Expected value: {int(np.round(1.0 / self.dt))}, Actual value: {self.metadata["render_fps"]}'
 
         self.observation_space = observation_space
-        self._set_action_space()
 
         self.render_mode = render_mode
         self.camera_name = camera_name
         self.camera_id = camera_id
+
+    def render(self, mode=None):
+        if self.render_mode is None:
+            gym.logger.warn(
+                "You are calling render method without specifying any render mode. "
+                "You can specify the render_mode at initialization, "
+                f'e.g. gym("{self.spec.id}", render_mode="rgb_array")'
+            )
+            return
+
+        if self.render_mode in {
+            "rgb_array",
+            "depth_array",
+        }:
+            camera_id = self.camera_id
+            camera_name = self.camera_name
+
+            if camera_id is not None and camera_name is not None:
+                raise ValueError(
+                    "Both `camera_id` and `camera_name` cannot be"
+                    " specified at the same time."
+                )
+
+            no_camera_specified = camera_name is None and camera_id is None
+            if no_camera_specified:
+                camera_name = "track"
+
+            if camera_id is None:
+                camera_id = mujoco.mj_name2id(
+                    self.model,
+                    mujoco.mjtObj.mjOBJ_CAMERA,
+                    camera_name,
+                )
+
+                self._get_viewer(self.render_mode).render(camera_id=camera_id)
+        if self.render_mode == "rgb_array":
+            data = self._get_viewer(self.render_mode).read_pixels(depth=False)
+            # original image is upside-down, so flip it
+            return data[::-1, :, :]
+        elif self.render_mode == "depth_array":
+            self._get_viewer(self.render_mode).render()
+            # Extract depth part of the read_pixels() tuple
+            data = self._get_viewer(self.render_mode).read_pixels(depth=True)[1]
+            # original image is upside-down, so flip it
+            return data[::-1, :]
+        elif self.render_mode == "human":
+            self._get_viewer(self.render_mode).render()
 
     def _initialize_simulation(self, model):
         if type(model) == str:
@@ -105,6 +152,13 @@ class extendedEnv(MujocoEnv):
         self.model.vis.global_.offwidth = self.width
         self.model.vis.global_.offheight = self.height
         self.data = mujoco.MjData(self.model)
+
+    def do_simulation(self, ctrl, n_frames):
+        bounds = self.model.actuator_ctrlrange.copy().astype(np.float32)
+        low, high = bounds.T
+        if np.array(ctrl).shape != low.shape:
+            raise ValueError("Action dimension mismatch")
+        self._step_mujoco_simulation(ctrl, n_frames)
 
     def _get_viewer(
         self, mode
