@@ -1,5 +1,4 @@
 from gym.envs.mujoco.mujoco_rendering import Viewer
-from gym.envs.mujoco.mujoco_env import MujocoEnv
 from .mujoco_vecenv import MujocoEnv
 import mujoco
 import numpy as np
