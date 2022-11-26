@@ -21,7 +21,7 @@ def mujoco_rpy2quat(rpy):
 
 
 class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
-    # drone simulation with PID attitude controller
+
     metadata = {
         "render_modes": [
             "human",
@@ -41,7 +41,7 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.action_space = Box(low=0, high=1, shape=(4, ), dtype=np.float64)
         observation_space = Box(low=-np.inf, high=np.inf, shape=(12, ), dtype=np.float64)
 
-        model = mjcf_to_mjmodel(make_arena(self.num_drones, self.pendulum, self.reference[:3]))
+        model = mjcf_to_mjmodel(make_arena(self.num_drones, self.pendulum, self.reference))
         extendedEnv.__init__(
             self,
             model,
@@ -87,7 +87,7 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         ctrl = np.array(actions).ravel()
         self.do_simulation(ctrl, self.frame_skip)
         self.num_steps = self.num_steps + 1
-        states, cols = self._get_obs()
+        states = self._get_obs()
 
         rewards = []
         dones = []
@@ -97,9 +97,13 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             state = states[i]
             heading_err = np.linalg.norm(state[5] - self.reference[3])
             heading_err = abs((heading_err + np.pi) % (2*np.pi) - np.pi)
+            pos_err = np.linalg.norm(state[:3] - self.reference[:3])
+            ctrl_effort = (np.array(actions[i])**2).sum()
+            tilt_magnitude = (np.array(state[3:5])**2).sum()
+            self.terminated[i] = (pos_err > self.max_distance) or self.num_steps[i] >= 400
             # reward = 0.5 - self.num_steps[i]*(np.linalg.norm(state[:3] - self.reference[:3]))
-            self.terminated[i] = (np.linalg.norm(state[:3] - self.reference[:3]) > self.max_distance) or cols[i] or self.num_steps[i] >= 400
-            reward = 0.5 - (np.linalg.norm(state[:3] - self.reference[:3])) - 10*self.terminated[i] - heading_err
+            reward = 0.5 - 2*pos_err - 30*self.terminated[i] - 0.1*heading_err - 0.1*ctrl_effort - 0.01*tilt_magnitude
+            # reward = 0.5 - (np.linalg.norm(state[:3] - self.reference[:3])) - 30*self.terminated[i]
             rewards.append(reward)
             dones.append(self.terminated[i])
             obs.append(np.concatenate((self.reference[:3] - state[:3], state[3:])))
@@ -122,7 +126,7 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)
         self.terminated = np.zeros((self.num_drones,), dtype=np.bool)
         self.set_state(qpos, qvel)
-        return self._get_obs()[0]
+        return self._get_obs()
 
     def vector_reset(self):
         ob = self.reset_model()
@@ -142,7 +146,7 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         qvel[6*index: 6*index + 3] = self.np_random.normal(scale=self.vel_variance, size=3)
         self.set_state(qpos, qvel)
         self.num_steps[index] = 0
-        return self._get_obs()[0][index]
+        return self._get_obs()[index]
 
     def _get_obs(self):
         states = []  # state info for every drone
@@ -154,23 +158,23 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             obs = np.concatenate((pos, angle, vel, ang_vel))
             states.append(obs)  # add state to state list
 
-        cols = np.zeros((self.num_drones,), dtype=np.bool)  # collision info for every drone
-        ncol = self.data.ncon  # number of collisions
-        for i in range(ncol):  # check for collisions (hardcoded and not pretty)
-            con = self.data.contact[i]
-            if con.geom1 > 0:
-                if not self.pendulum:
-                    drone_id = (con.geom1 - 2) // 9
-                else:
-                    drone_id = (con.geom1 - 2) // 10
-                cols[drone_id] = True
-            if con.geom2 > 0:
-                if not self.pendulum:
-                    drone_id = (con.geom2 - 2) // 9
-                else:
-                    drone_id = (con.geom2 - 2) // 10
-                cols[drone_id] = True
-        return states, cols
+        # cols = np.zeros((self.num_drones,), dtype=np.bool)  # collision info for every drone
+        # ncol = self.data.ncon  # number of collisions
+        # for i in range(ncol):  # check for collisions (hardcoded and not pretty)
+        #     con = self.data.contact[i]
+        #     if con.geom1 > 0:
+        #         if not self.pendulum:
+        #             drone_id = (con.geom1 - 2) // 9
+        #         else:
+        #             drone_id = (con.geom1 - 2) // 10
+        #         cols[drone_id] = True
+        #     if con.geom2 > 0:
+        #         if not self.pendulum:
+        #             drone_id = (con.geom2 - 2) // 9
+        #         else:
+        #             drone_id = (con.geom2 - 2) // 10
+        #         cols[drone_id] = True
+        return states
 
     def viewer_setup(self):
         assert self.viewer is not None
