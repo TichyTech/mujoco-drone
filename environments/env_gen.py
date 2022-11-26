@@ -2,6 +2,7 @@ import numpy as np
 from matplotlib.colors import hsv_to_rgb
 from dm_control import mjcf
 from dm_control import mujoco
+from scipy.spatial.transform import Rotation as R
 
 
 def make_drone(id=0, hue=1, pendulum=False):
@@ -29,6 +30,7 @@ def make_drone(id=0, hue=1, pendulum=False):
 
     core = model.worldbody.add('body', name='core_body_%d' % id, pos=(0, 0, 0))
     core.add('geom', name='core_geom_%d' % id, size=(2*body_size, 2*body_size, body_size), mass=0.9, rgba=rgba)
+    core.add('geom', pos=[body_size, 0, 0], name='front_%d' % id, size=(3*body_size, 0.3*body_size, 0.3*body_size), mass=0, rgba=rgba)
     core.add('site', name='sense', pos=(0, 0, -body_size/2))
     model.sensor.add('accelerometer', name='acc_%d' % id, site='sense')
     model.sensor.add('gyro', name='gyro_%d' % id, site='sense')
@@ -72,10 +74,13 @@ def make_arena(num_drones=1, pendulum=False, reference=None):
     arena.asset.add('texture', name='skybox', type='skybox', builtin='gradient',
                     rgb1=(.4, .6, .8), rgb2=(0, 0, 0), width=800, height=800, mark="random", markrgb=(1, 1, 1))
     arena.worldbody.add('geom', name='floor', type='plane', size=[10, 10, 0.5], material=grid)
-    arena.worldbody.add('light', name='light', pos=[0, 0, 3], cutoff=100, dir=[0, 0, -1.3])
+    arena.worldbody.add('light', name='light', pos=[0, 0, 6], cutoff=100, dir=[0, 0, -1.3])
 
-    if reference is not None:
-        arena.worldbody.add('geom', pos=reference, type='sphere', size=[0.1], rgba=(0, 0, 1, 1), contype=1, conaffinity=0)
+    if reference is not None:  # draw reference
+        arena.worldbody.add('geom', pos=reference[:3], type='sphere', size=[0.1], rgba=(1, 1, 1, 1), contype=1, conaffinity=0)
+        pos = reference[:3] + 0.075*np.array([np.cos(reference[3]), np.sin(reference[3]), 0])
+        arena.worldbody.add('geom', pos=pos, euler=[0, 0, reference[3]], size=[0.15, 0.01, 0.01],
+                            type='box', rgba=(1, 0, 0, 1), contype=1, conaffinity=0)
 
     drones = [make_drone(i, i/num_drones, pendulum) for i in range(num_drones)]
     height = .15
