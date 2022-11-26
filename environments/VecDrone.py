@@ -52,10 +52,6 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             height=height,
             **kwargs
         )
-        if self.pendulum:
-            self.mass = 1.4
-        else:
-            self.mass = 1.1
 
         if config['start_pos'] is None:
             self.start_pos = self.reference  # if no start specified, start in the reference
@@ -65,15 +61,7 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.max_pos_offset = config['max_pos_offset']
         self.angle_variance = config['angle_variance']
         self.vel_variance = config['vel_variance']
-
         self.max_distance = 2
-
-        self.motor_force = 6
-        self.errs = []
-        self.ctrls = []
-
-        self.first_obs = True
-        self.prev_err = None
 
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)
         self.terminated = np.zeros((self.num_drones,), dtype=np.bool)
@@ -97,13 +85,11 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             state = states[i]
             heading_err = np.linalg.norm(state[5] - self.reference[3])
             heading_err = abs((heading_err + np.pi) % (2*np.pi) - np.pi)
-            pos_err = np.linalg.norm(state[:3] - self.reference[:3])
+            pos_err = ((state[:3] - self.reference[:3])**2).sum()
             ctrl_effort = (np.array(actions[i])**2).sum()
             tilt_magnitude = (np.array(state[3:5])**2).sum()
-            self.terminated[i] = (pos_err > self.max_distance) or self.num_steps[i] >= 400
-            # reward = 0.5 - self.num_steps[i]*(np.linalg.norm(state[:3] - self.reference[:3]))
-            reward = 0.5 - pos_err - 50*self.terminated[i] - 0.01*heading_err - 0.01*ctrl_effort - 0.01*tilt_magnitude
-            # reward = 0.5 - (np.linalg.norm(state[:3] - self.reference[:3])) - 30*self.terminated[i]
+            self.terminated[i] = (pos_err > self.max_distance**2) or self.num_steps[i] >= 400
+            reward = 0.5 - 0.1*self.num_steps[i]*pos_err - 50*self.terminated[i] - 0.01*heading_err - 0.01*ctrl_effort - 0.01*tilt_magnitude
             rewards.append(reward)
             dones.append(self.terminated[i])
             obs.append(np.concatenate((self.reference[:3] - state[:3], state[3:])))
@@ -117,14 +103,16 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         start_pos = self.start_pos
         qpos = self.init_qpos
         qvel = self.init_qvel
+        pos_idx_offset = 4 * self.pendulum
+        vel_idx_offset = 3 * self.pendulum
         for i in range(self.num_drones):
             direction = self.np_random.normal(size=3)
             direction /= np.linalg.norm(direction)
             r = self.np_random.uniform(0, self.max_pos_offset)
-            qpos[7*i:7*i + 3] = start_pos[:3] + r*direction
+            qpos[(7 + pos_idx_offset)*i:(7 + pos_idx_offset)*i + 3] = start_pos[:3] + r*direction
             rpy = self.np_random.normal(scale=self.angle_variance, size=3) + [0, 0, start_pos[3]]
-            qpos[7*i + 3:7*i + 7] = mujoco_rpy2quat(rpy)
-            qvel[6*i: 6*i + 3] = self.np_random.normal(scale=self.vel_variance, size=3)
+            qpos[(7 + pos_idx_offset)*i + 3:(7 + pos_idx_offset)*i + 7] = mujoco_rpy2quat(rpy)
+            qvel[(6 + vel_idx_offset)*i: (6 + vel_idx_offset)*i + 3] = self.np_random.normal(scale=self.vel_variance, size=3)
 
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)
         self.terminated = np.zeros((self.num_drones,), dtype=np.bool)
@@ -138,29 +126,33 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
     def reset_at(self, index):
         if index is None:
             index = 0
+        pos_idx_offset = 4 * self.pendulum
+        vel_idx_offset = 3 * self.pendulum
         start_pos = self.start_pos
         qpos = self.data.qpos[:]
         qvel = self.data.qvel[:]
-        qpos[7 * index:7 * index + 7] = self.init_qpos[7 * index:7 * index + 7]
+        qpos[(7 + pos_idx_offset) * index:(7 + pos_idx_offset) * index + 7] = self.init_qpos[(7 + pos_idx_offset) * index:(7 + pos_idx_offset) * index + 7]
         direction = self.np_random.normal(size=3)  # draw a random sample inside a sphere
         direction /= np.linalg.norm(direction)
         r = self.np_random.uniform(0, self.max_pos_offset)
-        qpos[7 * index:7 * index + 3] = start_pos[:3] + r*direction
-        qvel[6*index: 6*index + 6] = self.init_qvel[6*index: 6*index + 6]
+        qpos[(7 + pos_idx_offset) * index:(7 + pos_idx_offset) * index + 3] = start_pos[:3] + r*direction
+        qvel[(6 + vel_idx_offset)*index: (6 + vel_idx_offset)*index + 6] = self.init_qvel[(6 + vel_idx_offset)*index: (6 + vel_idx_offset)*index + 6]
         rpy = self.np_random.normal(scale=self.angle_variance, size=3) + [0, 0, start_pos[3]]
-        qpos[7*index + 3:7*index + 7] = mujoco_rpy2quat(rpy)
-        qvel[6*index: 6*index + 3] = self.np_random.normal(scale=self.vel_variance, size=3)
+        qpos[(7 + pos_idx_offset)*index + 3:(7 + pos_idx_offset)*index + 7] = mujoco_rpy2quat(rpy)
+        qvel[(6 + vel_idx_offset)*index: (6 + vel_idx_offset)*index + 3] = self.np_random.normal(scale=self.vel_variance, size=3)
         self.set_state(qpos, qvel)
         self.num_steps[index] = 0
         return self._get_obs()[index]
 
     def _get_obs(self):
         states = []  # state info for every drone
+        pos_idx_offset = 4 * self.pendulum
+        vel_idx_offset = 3 * self.pendulum
         for i in range(self.num_drones):
-            pos = self.data.qpos[7*i:7*i + 3]  # xyz positions
+            pos = self.data.qpos[(7 + pos_idx_offset)*i:(7 + pos_idx_offset)*i + 3]  # xyz positions
             angle = mujoco_quat2rpy(self.data.qpos[7*i + 3:7*i + 7])  # rpy angles
-            vel = self.data.qvel[6*i:6*i + 3]  # xyz velocity
-            ang_vel = self.data.qvel[6*i + 3:6*i + 6]  # rpy velocity (probably in different order)
+            vel = self.data.qvel[(6 + vel_idx_offset)*i:(6 + vel_idx_offset)*i + 3]  # xyz velocity
+            ang_vel = self.data.qvel[(6 + vel_idx_offset)*i + 3:(6 + vel_idx_offset)*i + 6]  # rpy velocity (probably in different order)
             obs = np.concatenate((pos, angle, vel, ang_vel))
             states.append(obs)  # add state to state list
 

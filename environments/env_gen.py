@@ -24,9 +24,9 @@ def make_drone(id=0, hue=1, pendulum=False):
 
     body_size = 0.02
     arm_size = 0.15
-    pendulum_length = 0.1
-    pole_mass = 0.1
-    weight_mass = 0.2
+    pendulum_length = 0.1 + 0.05*np.random.rand()
+    pole_mass = pendulum_length
+    weight_mass = 0.15 + 0.1*np.random.rand()
 
     core = model.worldbody.add('body', name='core_body_%d' % id, pos=(0, 0, 0))
     core.add('geom', name='core_geom_%d' % id, size=(2*body_size, 2*body_size, body_size), mass=0.9, rgba=rgba)

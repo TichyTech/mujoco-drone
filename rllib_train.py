@@ -13,14 +13,27 @@ base_config = {'num_drones': 1,
               'max_pos_offset': 0.4,
               'angle_variance': [0.3, 0.3, 0.3],
               'vel_variance': [0.04, 0.04, 0.04],
-              'pendulum': False,
+              'pendulum': True,
               'render_mode': 'human'}
 
 eval_env_config = copy(base_config)
 train_env_config = copy(base_config)
 
-model_config = MODEL_DEFAULTS
-model_config["fcnet_hiddens"] = [128, 128]
+model_config = {"fcnet_hiddens": [128, 128]}
+# model_config = {
+#     "use_attention": True,
+#     "max_seq_len": 10,
+#     "attention_num_transformer_units": 1,
+#     "attention_dim": 16,
+#     "attention_memory_inference": 10,
+#     "attention_memory_training": 10,
+#     "attention_num_heads": 1,
+#     "attention_head_dim": 16,
+#     "attention_position_wise_mlp_dim": 32,
+#     "attention_use_n_prev_actions": 0
+#     }
+# model_config['use_lstm'] = True
+# model_config["max_seq_len"] = 20
 
 if __name__ == '__main__':
 
@@ -49,7 +62,7 @@ if __name__ == '__main__':
 
     ep = 0
     algo = algo_config.build()
-    # algo.load_checkpoint("C:/Users/tomtc/Desktop/reinforcement_learning/mujoco-drone/models/PPO/checkpoint_000200/checkpoint-200")
+    # algo.load_checkpoint("C:/Users/tomtc/Desktop/reinforcement_learning/mujoco-drone/models/PPO/checkpoint_000010/checkpoint-10")
     for i in range(200):
         ep = ep + 1
         start = time()
@@ -57,16 +70,16 @@ if __name__ == '__main__':
         print("Epoch {:d} took {:.2f} seconds; avg. reward={:.3f}".format(ep, (time() - start),
                                                                               results['episode_reward_mean']))
         if ep % 10 == 0:
-            print("Saving checkpoint to {}".format(algo.save("./models/PPO")))
+            print("Saving checkpoint to {}".format(algo.save("./models/PPO/LSTM")))
             # rollout a trajectory using the learned model
-            for _ in range(eval_rollouts):
-                obs = eval_env.vector_reset()
-                eval_env.render()
-                done = False
-                total_reward = 0.0
-                while not done:
-                    action = algo.compute_single_action(obs[0])
-                    obs, reward, done, info = eval_env.vector_step([action])
-                    eval_env.render()
-                    total_reward += reward[0]
-                print(f"Rollout total-reward={total_reward}")
+            # for _ in range(eval_rollouts):
+            #     obs = eval_env.vector_reset()
+            #     eval_env.render()
+            #     done = False
+            #     total_reward = 0.0
+            #     while not done:
+            #         action = algo.compute_single_action(obs[0])
+            #         obs, reward, done, info = eval_env.vector_step([action])
+            #         eval_env.render()
+            #         total_reward += reward[0]
+            #     print(f"Rollout total-reward={total_reward}")
