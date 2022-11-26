@@ -45,46 +45,12 @@ if __name__ == '__main__':
         .environment(env=envs.VecDroneEnv, env_config=train_env_config)\
 
     # create an environment for evaluation
-    # eval_env = envs.VecDroneEnv(eval_env_config)
+    eval_env = envs.VecDroneEnv(eval_env_config)
 
-    # train_epochs = [2, 2, 30, 30]
-    rollout_lens = [32, 64, 128, 256]
     ep = 0
     algo = algo_config.build()
-
-    # def change_rl(worker):
-    #     worker.rollout_fragment_length = rollout_lens[0]
-    #     # worker.config['sgd_minibatch_size'] = 8*64*rollout_lens[i]
-    #     print(worker.rollout_fragment_length)
-
-    # algo.workers.foreach_worker(change_rl)
-    # # algo.workers.local_worker()
-    # algo.config = new_config.to_dict()
-    # algo.config['rollout_fragment_length'] = rollout_lens[0]
-    # algo.config['train_batch_size'] = 8 * 64 * rollout_lens[0]
-    # algo.config['sgd_minibatch_size'] = 2 * 64 * rollout_lens[0]
-    # algo.config["min_train_timesteps_per_iteration"]
-    # algo.load_checkpoint("./models/PPO/checkpoint_000201/checkpoint-201")
+    # algo.load_checkpoint("C:/Users/tomtc/Desktop/reinforcement_learning/mujoco-drone/models/PPO/checkpoint_000200/checkpoint-200")
     for i in range(200):
-        # if i > 0:
-        #     weights = algo.get_weights()  # save previous weights
-        # new_config = algo_config.training(gamma=0.99, lr=0.001, sgd_minibatch_size=8*64*rollout_lens[i] // 4,
-        #           train_batch_size=8*64*rollout_lens[i], model=model_config)\
-        #     .rollouts(num_rollout_workers=num_processes, rollout_fragment_length=rollout_lens[i])
-        # algo = new_config.build()
-        # algo.reset_config(new_config)
-
-        # def change_rl(worker):
-        #     worker.rollout_fragment_length = rollout_lens[i]
-        #     # worker.config['sgd_minibatch_size'] = 8*64*rollout_lens[i]
-        #     print(worker.rollout_fragment_length)
-        # algo.workers.foreach_worker(change_rl)
-        # # # algo.workers.local_worker()
-        # # algo.config = new_config.to_dict()
-        # algo.config['train_batch_size'] = 8*64*rollout_lens[0]
-        # if i > 0:
-        #     algo.set_weights(weights)
-        # for _ in range(train_epochs[i]):
         ep = ep + 1
         start = time()
         results = algo.train()
@@ -92,15 +58,15 @@ if __name__ == '__main__':
                                                                               results['episode_reward_mean']))
         if ep % 10 == 0:
             print("Saving checkpoint to {}".format(algo.save("./models/PPO")))
-            #     # rollout a trajectory using the learned model
-            #     for _ in range(eval_rollouts):
-            #         obs = eval_env.vector_reset()
-            #         eval_env.render()
-            #         done = False
-            #         total_reward = 0.0
-            #         while not done:
-            #             action = algo.compute_single_action(obs[0])
-            #             obs, reward, done, info = eval_env.vector_step([action])
-            #             eval_env.render()
-            #             total_reward += reward[0]
-            #         print(f"Rollout total-reward={total_reward}")
+            # rollout a trajectory using the learned model
+            for _ in range(eval_rollouts):
+                obs = eval_env.vector_reset()
+                eval_env.render()
+                done = False
+                total_reward = 0.0
+                while not done:
+                    action = algo.compute_single_action(obs[0])
+                    obs, reward, done, info = eval_env.vector_step([action])
+                    eval_env.render()
+                    total_reward += reward[0]
+                print(f"Rollout total-reward={total_reward}")
