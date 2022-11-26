@@ -62,7 +62,7 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         else:
             self.start_pos = config['start_pos']
 
-        self.pos_variance = config['pos_variance']
+        self.max_pos_offset = config['max_pos_offset']
         self.angle_variance = config['angle_variance']
         self.vel_variance = config['vel_variance']
 
@@ -102,7 +102,7 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             tilt_magnitude = (np.array(state[3:5])**2).sum()
             self.terminated[i] = (pos_err > self.max_distance) or self.num_steps[i] >= 400
             # reward = 0.5 - self.num_steps[i]*(np.linalg.norm(state[:3] - self.reference[:3]))
-            reward = 0.5 - 2*pos_err - 30*self.terminated[i] - 0.1*heading_err - 0.1*ctrl_effort - 0.01*tilt_magnitude
+            reward = 0.5 - pos_err - 50*self.terminated[i] - 0.01*heading_err - 0.01*ctrl_effort - 0.01*tilt_magnitude
             # reward = 0.5 - (np.linalg.norm(state[:3] - self.reference[:3])) - 30*self.terminated[i]
             rewards.append(reward)
             dones.append(self.terminated[i])
@@ -118,7 +118,10 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         qpos = self.init_qpos
         qvel = self.init_qvel
         for i in range(self.num_drones):
-            qpos[7*i:7*i + 3] = start_pos[:3] + self.np_random.normal(scale=self.pos_variance, size=3)
+            direction = self.np_random.normal(size=3)
+            direction /= np.linalg.norm(direction)
+            r = self.np_random.uniform(0, self.max_pos_offset)
+            qpos[7*i:7*i + 3] = start_pos[:3] + r*direction
             rpy = self.np_random.normal(scale=self.angle_variance, size=3) + [0, 0, start_pos[3]]
             qpos[7*i + 3:7*i + 7] = mujoco_rpy2quat(rpy)
             qvel[6*i: 6*i + 3] = self.np_random.normal(scale=self.vel_variance, size=3)
@@ -139,7 +142,10 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         qpos = self.data.qpos[:]
         qvel = self.data.qvel[:]
         qpos[7 * index:7 * index + 7] = self.init_qpos[7 * index:7 * index + 7]
-        qpos[7 * index:7 * index + 3] = start_pos[:3] + self.np_random.normal(scale=self.pos_variance, size=3)
+        direction = self.np_random.normal(size=3)  # draw a random sample inside a sphere
+        direction /= np.linalg.norm(direction)
+        r = self.np_random.uniform(0, self.max_pos_offset)
+        qpos[7 * index:7 * index + 3] = start_pos[:3] + r*direction
         qvel[6*index: 6*index + 6] = self.init_qvel[6*index: 6*index + 6]
         rpy = self.np_random.normal(scale=self.angle_variance, size=3) + [0, 0, start_pos[3]]
         qpos[7*index + 3:7*index + 7] = mujoco_rpy2quat(rpy)
