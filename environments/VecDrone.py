@@ -6,6 +6,14 @@ from gym.spaces import Dict, Box
 from scipy.spatial.transform import Rotation as R
 from ray.rllib.env.vector_env import VectorEnv
 
+base_config = {'reference': [0.5, 0.5, 3.5, 0.4],  # x,y,z,yaw
+               'start_pos': [0, 0, 3, 0],  # x,y,z,yaw
+               'max_pos_offset': 0.4,  # maximum position offset used for random sampling of starting position
+               'angle_variance': [0.3, 0.3, 0.3],  # variance used for random angle sampling
+               'vel_variance': [0.04, 0.04, 0.04],  # variance used for random velocity sampling
+               'pendulum': True,  # whether to include a pendulum on a drone
+               'render_mode': 'human'}
+
 
 def mujoco_quat2DCM(quat):
     return R.from_quat(np.append(quat[1:], quat[0])).as_matrix()
@@ -20,7 +28,7 @@ def mujoco_rpy2quat(rpy):
     return np.append(quat[3], quat[:3])
 
 
-class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
+class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
 
     metadata = {
         "render_modes": [
@@ -34,7 +42,7 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
     def __init__(self, config, **kwargs):
         utils.EzPickle.__init__(self, **kwargs)
         width, height = 640, 480
-        self.num_drones = config['num_drones']
+        self.num_drones = config.get('num_drones', 1)
         self.pendulum = config['pendulum']
         self.reference = config['reference']
 
@@ -88,8 +96,9 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             pos_err = ((state[:3] - self.reference[:3])**2).sum()
             ctrl_effort = (np.array(actions[i])**2).sum()
             tilt_magnitude = (np.array(state[3:5])**2).sum()
-            self.terminated[i] = (pos_err > self.max_distance**2) or self.num_steps[i] >= 400
-            reward = 0.5 - 0.1*self.num_steps[i]*pos_err - 50*self.terminated[i] - 0.01*heading_err - 0.01*ctrl_effort - 0.01*tilt_magnitude
+            too_far = (pos_err > self.max_distance**2)
+            self.terminated[i] = too_far or self.num_steps[i] >= 400
+            reward = 0.1*self.num_steps[i]*(0.5 - pos_err) - 50*too_far - 0.01*heading_err - 0.01*ctrl_effort - 0.01*tilt_magnitude
             rewards.append(reward)
             dones.append(self.terminated[i])
             obs.append(np.concatenate((self.reference[:3] - state[:3], state[3:])))
@@ -150,7 +159,7 @@ class VecDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         vel_idx_offset = 3 * self.pendulum
         for i in range(self.num_drones):
             pos = self.data.qpos[(7 + pos_idx_offset)*i:(7 + pos_idx_offset)*i + 3]  # xyz positions
-            angle = mujoco_quat2rpy(self.data.qpos[7*i + 3:7*i + 7])  # rpy angles
+            angle = mujoco_quat2rpy(self.data.qpos[(7 + pos_idx_offset)*i + 3:(7 + pos_idx_offset)*i + 7])  # rpy angles
             vel = self.data.qvel[(6 + vel_idx_offset)*i:(6 + vel_idx_offset)*i + 3]  # xyz velocity
             ang_vel = self.data.qvel[(6 + vel_idx_offset)*i + 3:(6 + vel_idx_offset)*i + 6]  # rpy velocity (probably in different order)
             obs = np.concatenate((pos, angle, vel, ang_vel))

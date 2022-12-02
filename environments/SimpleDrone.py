@@ -2,12 +2,12 @@ import numpy as np
 from gym import utils
 from .mujoco_env_custom import extendedEnv
 from .env_gen import make_arena, mjcf_to_mjmodel
-from gym.spaces import Dict, Box
+from gym.spaces import Box
 from scipy.spatial.transform import Rotation as R
-from typing import Optional, Union
+from typing import Optional
 
 
-class DronesEnv(extendedEnv, utils.EzPickle):
+class SimpleDrone(extendedEnv, utils.EzPickle):
 
     metadata = {
         "render_modes": [
