@@ -6,12 +6,51 @@ from gym.spaces import Dict, Box
 from scipy.spatial.transform import Rotation as R
 from ray.rllib.env.vector_env import VectorEnv
 
+
+def distance_energy_reward(env, state, action, num_steps):
+    # penalize distance and action magnitude
+    ref = env.reference
+    heading_err = np.linalg.norm(state[5] - ref[3])
+    heading_err = abs((heading_err + np.pi) % (2 * np.pi) - np.pi)
+    pos_err = ((state[:3] - ref[:3]) ** 2).sum()
+    ctrl_effort = (np.array(action) ** 2).sum()
+    too_far = (pos_err > env.max_distance ** 2)
+    reward = - pos_err - 100*too_far - heading_err - ctrl_effort
+    return reward
+
+
+def distance_time_energy_reward(env, state, action, num_steps):
+    # penalize distance weighted by time steps and action magnitude
+    ref = env.reference
+    heading_err = np.linalg.norm(state[5] - ref[3])
+    heading_err = abs((heading_err + np.pi) % (2 * np.pi) - np.pi)
+    pos_err = ((state[:3] - ref[:3]) ** 2).sum()
+    ctrl_effort = (np.array(action) ** 2).sum()
+    too_far = (pos_err > env.max_distance ** 2)
+    reward = - (1 + num_steps//50)*pos_err - 100*too_far - heading_err - ctrl_effort
+    return reward
+
+
+def distance_reward(env, state, action, num_steps):
+    # penalize distance from reference
+    ref = env.reference
+    heading_err = np.linalg.norm(state[5] - ref[3])
+    heading_err = abs((heading_err + np.pi) % (2 * np.pi) - np.pi)
+    pos_err = np.linalg.norm(state[:3] - ref[:3])
+    too_far = pos_err > env.max_distance
+    reward = - pos_err - 100*too_far - heading_err
+    return reward
+
+
 base_config = {'reference': [0.5, 0.5, 3.5, 0.4],  # x,y,z,yaw
                'start_pos': [0, 0, 3, 0],  # x,y,z,yaw
-               'max_pos_offset': 0.4,  # maximum position offset used for random sampling of starting position
+               'max_distance': 2,
+               'max_random_offset': 0.4,  # maximum position offset used for random sampling of starting position
                'angle_variance': [0.3, 0.3, 0.3],  # variance used for random angle sampling
                'vel_variance': [0.04, 0.04, 0.04],  # variance used for random velocity sampling
                'pendulum': True,  # whether to include a pendulum on a drone
+               'reward_fcn': distance_reward,
+               'max_steps': 400,
                'render_mode': 'human'}
 
 
@@ -43,8 +82,8 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         utils.EzPickle.__init__(self, **kwargs)
         width, height = 640, 480
         self.num_drones = config.get('num_drones', 1)
-        self.pendulum = config['pendulum']
-        self.reference = config['reference']
+        self.pendulum = config.get('pendulum', False)
+        self.reference = config.get('reference', [0, 0, 0, 1])
 
         self.action_space = Box(low=0, high=1, shape=(4, ), dtype=np.float64)
         observation_space = Box(low=-np.inf, high=np.inf, shape=(12, ), dtype=np.float64)
@@ -54,22 +93,20 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
             self,
             model,
             4,
-            render_mode=config['render_mode'],
+            render_mode=config.get('render_mode', None),
             observation_space=observation_space,
             width=width,
             height=height,
             **kwargs
         )
 
-        if config['start_pos'] is None:
-            self.start_pos = self.reference  # if no start specified, start in the reference
-        else:
-            self.start_pos = config['start_pos']
-
-        self.max_pos_offset = config['max_pos_offset']
-        self.angle_variance = config['angle_variance']
-        self.vel_variance = config['vel_variance']
-        self.max_distance = 2
+        self.start_pos = config.get('start_pos', self.reference)
+        self.max_pos_offset = config.get('max_random_offset', 0)
+        self.angle_variance = config.get('angle_variance', [0, 0, 0])
+        self.vel_variance = config.get('vel_variance', [0, 0, 0])
+        self.max_distance = config.get('max_distance', 1)
+        self.reward_fcn = config.get('reward_fcn', distance_reward)
+        self.max_steps = config.get('max_steps', 400)
 
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)
         self.terminated = np.zeros((self.num_drones,), dtype=np.bool)
@@ -91,14 +128,9 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         infos = []
         for i in range(self.num_drones):
             state = states[i]
-            heading_err = np.linalg.norm(state[5] - self.reference[3])
-            heading_err = abs((heading_err + np.pi) % (2*np.pi) - np.pi)
-            pos_err = ((state[:3] - self.reference[:3])**2).sum()
-            ctrl_effort = (np.array(actions[i])**2).sum()
-            tilt_magnitude = (np.array(state[3:5])**2).sum()
-            too_far = (pos_err > self.max_distance**2)
-            self.terminated[i] = too_far or self.num_steps[i] >= 400
-            reward = 0.1*self.num_steps[i]*(0.5 - pos_err) - 50*too_far - 0.01*heading_err - 0.01*ctrl_effort - 0.01*tilt_magnitude
+            pos_err = np.linalg.norm(state[:3] - self.reference[:3])
+            self.terminated[i] = pos_err > self.max_distance or self.num_steps[i] >= self.max_steps
+            reward = self.reward_fcn(self, state, actions[i], self.num_steps[i])
             rewards.append(reward)
             dones.append(self.terminated[i])
             obs.append(np.concatenate((self.reference[:3] - state[:3], state[3:])))

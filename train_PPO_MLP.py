@@ -1,5 +1,5 @@
 from ray.rllib.algorithms.ppo import PPOConfig
-from environments.VecDrone import VecDrone, base_config
+from environments.VecDrone import VecDrone, base_config, distance_time_energy_reward, distance_reward
 from ray.rllib.models.catalog import MODEL_DEFAULTS
 from copy import copy
 from training import train
@@ -20,6 +20,7 @@ train_batch_size = num_processes * train_drones * rollout_length  # total length
 # environment configuration
 eval_env_config = copy(base_config)
 train_env_config = copy(base_config)
+train_env_config['reward_fcn'] = distance_time_energy_reward
 train_env_config['num_drones'] = train_drones  # set number of drones used per environment for training in parallel
 if not train_vis:
     train_env_config['render_mode'] = None
