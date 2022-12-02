@@ -15,7 +15,7 @@ def distance_energy_reward(env, state, action, num_steps):
     pos_err = ((state[:3] - ref[:3]) ** 2).sum()
     ctrl_effort = (np.array(action) ** 2).sum()
     too_far = (pos_err > env.max_distance ** 2)
-    reward = - pos_err - 100*too_far - heading_err - ctrl_effort
+    reward = - pos_err - 500*too_far - heading_err - 0.02*ctrl_effort
     return reward
 
 
@@ -27,7 +27,7 @@ def distance_time_energy_reward(env, state, action, num_steps):
     pos_err = ((state[:3] - ref[:3]) ** 2).sum()
     ctrl_effort = (np.array(action) ** 2).sum()
     too_far = (pos_err > env.max_distance ** 2)
-    reward = - (1 + num_steps//50)*pos_err - 100*too_far - heading_err - ctrl_effort
+    reward = - (1 + num_steps//50)*pos_err - 500*too_far - heading_err - 0.02*ctrl_effort
     return reward
 
 
