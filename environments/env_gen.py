@@ -8,6 +8,7 @@ from scipy.spatial.transform import Rotation as R
 def make_drone(id=0, hue=1, pendulum=False):
     rgba = [0, 0, 0, 1]
     rgba[:3] = hsv_to_rgb([hue, 1, 1])
+    motor_tau = 0.005  # motor acts as a low pass filter with crossover frequency 1/motor_tau
 
     model = mjcf.RootElement(model='drone_%d' % id)
 
@@ -42,7 +43,9 @@ def make_drone(id=0, hue=1, pendulum=False):
         core.add('geom', name='arm_%d' % i, size=(arm_size, 0.005, 0.005), pos=arm_pos, euler=[0, 0, theta], mass=0.025)
         core.add('site', name='motorsite_%d' % i, type='cylinder', pos=2.2 * arm_pos + np.array([0, 0, 0.0075]), size=(0.01, 0.0025))
         core.add('geom', name='prop_%d' % i, type='cylinder', pos=2.2 * arm_pos + np.array([0, 0, 0.01]), size=(0.05, 0.0025), mass=0.025)
-        model.actuator.add('motor', name='motor_%d' % i, site='motorsite_%d' % i, gear=(0, 0, 6, 0, 0, 0.6*(-1)**i), ctrllimited=True, ctrlrange=(0, 1))
+        model.actuator.add('general', name='motor_%d' % i, site='motorsite_%d' % i, gear=(0, 0, 6, 0, 0, 0.6*(-1)**i),
+                           ctrllimited=True, ctrlrange=(0, 1), dyntype='filter',
+                           dynprm=[motor_tau, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     if pendulum:
         pend = core.add('body', name='pendulum', pos=(0, 0, 0))
         pend.add('joint', type='ball', pos=(0, 0, -body_size))
