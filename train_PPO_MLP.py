@@ -45,5 +45,5 @@ if __name__ == '__main__':
         algo.restore(model_dir + checkpoint_to_load)
 
     eval_env = VecDrone(eval_env_config)  # create an environment for evaluation
-    train(algo, eval_env, num_epochs, eval_rollouts, model_dir)
+    train(algo, eval_env, num_epochs, model_dir, eval_rollouts=eval_rollouts)
 

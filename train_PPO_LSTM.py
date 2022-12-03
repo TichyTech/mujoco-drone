@@ -1,5 +1,5 @@
 from ray.rllib.algorithms.ppo import PPOConfig
-from environments.VecDrone import VecDrone, base_config
+from environments.VecDrone import VecDrone, base_config, distance_time_energy_reward
 from ray.rllib.models.catalog import MODEL_DEFAULTS
 from copy import copy
 from training import train
@@ -21,13 +21,15 @@ train_batch_size = num_processes * train_drones * rollout_length  # total length
 eval_env_config = copy(base_config)
 train_env_config = copy(base_config)
 train_env_config['num_drones'] = train_drones  # set number of drones used per environment for training in parallel
+train_env_config['reward_fcn'] = distance_time_energy_reward
 if not train_vis:
     train_env_config['render_mode'] = None
 
 # model configuration
 model_config = MODEL_DEFAULTS  # use default model configuration
-model_config = {"fcnet_hiddens": [128, 128]}  # set the layer widths of the MLP
+model_config = {"fcnet_hiddens": [64, 64]}  # set the layer widths of the MLP
 model_config['use_lstm'] = True
+model_config['lstm_cell_size'] = 64
 model_config["max_seq_len"] = 20
 
 # PPO configuration
@@ -39,12 +41,15 @@ algo_config = PPOConfig() \
     .framework(framework='torch') \
     .environment(env=VecDrone, env_config=train_env_config)
 
-
 if __name__ == '__main__':
 
     algo = algo_config.build()
+    # print(algo.workers.local_worker().policy_map['default_policy'].model)
+    # print(algo.workers.local_worker().policy_map['default_policy'].__dict__)
+    print(algo.get_policy().model)
+
     if os.path.exists(model_dir + checkpoint_to_load):
         algo.restore(model_dir + checkpoint_to_load)
 
     eval_env = VecDrone(eval_env_config)  # create an environment for evaluation
-    train(algo, eval_env, num_epochs, eval_rollouts, model_dir)
+    train(algo, eval_env, num_epochs, model_dir, eval_rollouts=eval_rollouts)
