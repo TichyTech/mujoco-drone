@@ -1,5 +1,17 @@
 from time import time
+import json
 import numpy as np
+
+
+def load_model_config(model_dir):
+    with open(model_dir + 'model_config.json', 'r') as f:
+        model_config = json.load(f)
+    return model_config
+
+
+def save_model_config(model_dir, model_config):
+    with open(model_dir + 'model_config.json', 'w') as f:
+        json.dump(model_config, f, indent=4)
 
 
 def rollout_trajectory(env, algo):
@@ -22,14 +34,16 @@ def rollout_trajectory(env, algo):
     print(f"Rollout total-reward={total_reward}")
 
 
-def train(algo, eval_env, num_epochs, model_dir='models', eval_rollouts=0, checkpoint_ep=10):
+def train(algo, num_epochs, model_dir='models', checkpoint_ep=10):
     for ep in range(num_epochs):
         start = time()
         results = algo.train()
-        print("Epoch {:d} took {:.2f} seconds; avg. reward={:.3f}".format(ep + 1, (time() - start),
-                                                                          results['episode_reward_mean']))
+        # mean_action_reward = np.mean(np.array(results['hist_stats']['episode_reward']) / results['hist_stats']['episode_lengths'])
+        print("Epoch {:d} took {:.2f} seconds; avg. episode reward={:.3f}, avg. episode length={:.2f}".format(ep + 1, results['time_this_iter_s'],
+                                                                          results['episode_reward_mean'], results['episode_len_mean']))
+        algo.evaluate()
         if (ep + 1) % checkpoint_ep == 0:
             print("Saving checkpoint to {}".format(algo.save(model_dir + 'checkpoints')))  # save checkpoint
-            for _ in range(eval_rollouts):
+            # for _ in range(eval_rollouts):
                 # rollout a trajectory using the learned model
-                rollout_trajectory(eval_env, algo)
+                # rollout_trajectory(eval_env, algo)

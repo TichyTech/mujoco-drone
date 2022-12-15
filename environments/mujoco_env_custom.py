@@ -1,4 +1,5 @@
 from gym.envs.mujoco.mujoco_rendering import Viewer
+import glfw
 from .mujoco_vecenv import MujocoEnv
 import mujoco
 import numpy as np
@@ -6,12 +7,53 @@ from typing import Union, Optional
 from gym.spaces import Space
 from os import path
 import gym
+from threading import Lock
 
 DEFAULT_HEIGHT = 480
 DEFAULT_WIDTH = 640
 
 
 class extended_Viewer(Viewer):
+
+    def __init__(self, model, data, window_title='mujoco'):
+        self._gui_lock = Lock()
+        self._button_left_pressed = False
+        self._button_right_pressed = False
+        self._last_mouse_x = 0
+        self._last_mouse_y = 0
+        self._paused = False
+        self._transparent = False
+        self._contacts = False
+        self._render_every_frame = True
+        self._image_idx = 0
+        self._image_path = "/tmp/frame_%07d.png"
+        self._time_per_render = 1 / 60.0
+        self._run_speed = 1.0
+        self._loop_count = 0
+        self._advance_by_one_step = False
+        self._hide_menu = False
+
+        # glfw init
+        glfw.init()
+        width, height = glfw.get_video_mode(glfw.get_primary_monitor()).size
+        self.window = glfw.create_window(width // 2, height // 2, window_title, None, None)
+        glfw.make_context_current(self.window)
+        glfw.swap_interval(1)
+
+        framebuffer_width, framebuffer_height = glfw.get_framebuffer_size(self.window)
+        window_width, _ = glfw.get_window_size(self.window)
+        self._scale = framebuffer_width * 1.0 / window_width
+
+        # set callbacks
+        glfw.set_cursor_pos_callback(self.window, self._cursor_pos_callback)
+        glfw.set_mouse_button_callback(self.window, self._mouse_button_callback)
+        glfw.set_scroll_callback(self.window, self._scroll_callback)
+        glfw.set_key_callback(self.window, self._key_callback)
+
+        # get viewport
+        self.viewport = mujoco.MjrRect(0, 0, framebuffer_width, framebuffer_height)
+
+        super(Viewer, self).__init__(model, data, offscreen=False)
 
     def render_to_array(self, cam_id=-1):
         mujoco.mjr_setBuffer(mujoco.mjtFramebuffer.mjFB_OFFSCREEN, self.con)
@@ -168,7 +210,7 @@ class extendedEnv(MujocoEnv):
         self.viewer = self._viewers.get(mode)
         if self.viewer is None:
             if mode == "human":
-                self.viewer = extended_Viewer(self.model, self.data)
+                self.viewer = extended_Viewer(self.model, self.data, self.window_title)
             elif mode in {"rgb_array", "depth_array"}:
                 from gym.envs.mujoco.mujoco_rendering import RenderContextOffscreen
 
