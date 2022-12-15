@@ -36,7 +36,7 @@ def make_drone(id=0, hue=1, pendulum=False):
     model.sensor.add('accelerometer', name='acc_%d' % id, site='sense')
     model.sensor.add('gyro', name='gyro_%d' % id, site='sense')
     model.sensor.add('magnetometer', name='mag_%d' % id, site='sense')
-    core.add('camera', name='dronecam_%d' % id, pos=(body_size, 0, body_size/2), euler=[0, np.pi, 0])  # TODO: check angle
+    core.add('camera', name='dronecam_%d' % id, pos=(body_size, 0, body_size/2), euler=[0, -np.pi/2, 0])  # TODO: check angle
     for i in range(4):
         theta = i * np.pi / 2 + np.pi/4
         arm_pos = (1.4*body_size + 0.5*arm_size) * np.array([np.cos(theta), np.sin(theta), 0])
@@ -69,7 +69,6 @@ def make_arena(num_drones=1, pendulum=False, reference=None):
     arena.compiler.inertiafromgeom = True
     arena.compiler.exactmeshinertia = True
 
-
     chequered = arena.asset.add('texture', name='checker', type='2d', builtin='checker', width=300,
                                 height=300, rgb1=[.2, .3, .4], rgb2=[.3, .4, .5])
     grid = arena.asset.add('material', name='grid', texture=chequered,
@@ -79,11 +78,36 @@ def make_arena(num_drones=1, pendulum=False, reference=None):
     arena.worldbody.add('geom', name='floor', type='plane', size=[10, 10, 0.5], material=grid)
     arena.worldbody.add('light', name='light', pos=[0, 0, 6], cutoff=100, dir=[0, 0, -1.3])
 
+    #  visualize origin
+    # arrow_sz = [0.005, 0.5]
+    # sphere_sz = 0.1
+    # arrow_dist = sphere_sz + arrow_sz[1] / 2
+    # x_pos = arrow_dist * np.array([1, 0, 0])
+    # y_pos = arrow_dist * np.array([0, 1, 0])
+    # origin_body = arena.worldbody.add('body', name='origin', pos=[0, 0, 0], mocap='true')
+    # origin_body.add('geom', type='sphere', size=[sphere_sz], rgba=(1, 1, 1, 1), contype=1, conaffinity=0)
+    # origin_body.add('geom', pos=x_pos, euler=[np.pi / 2, 0 - np.pi / 2, 0], size=arrow_sz,
+    #              type='cylinder', rgba=(1, 0, 0, 1), contype=1, conaffinity=0)
+    # origin_body.add('geom', pos=y_pos, euler=[np.pi / 2, 0, 0], size=arrow_sz,
+    #              type='cylinder', rgba=(0, 1, 0, 1), contype=1, conaffinity=0)
+    # origin_body.add('geom', pos=[0, 0, arrow_dist], size=arrow_sz,
+    #              type='cylinder', rgba=(0, 0, 1, 1), contype=1, conaffinity=0)
+
     if reference is not None:  # draw reference
-        arena.worldbody.add('geom', pos=reference[:3], type='sphere', size=[0.1], rgba=(1, 1, 1, 1), contype=1, conaffinity=0)
-        pos = reference[:3] + 0.075*np.array([np.cos(reference[3]), np.sin(reference[3]), 0])
-        arena.worldbody.add('geom', pos=pos, euler=[0, 0, reference[3]], size=[0.15, 0.01, 0.01],
-                            type='box', rgba=(1, 0, 0, 1), contype=1, conaffinity=0)
+        arrow_sz = [0.005, 0.15]
+        sphere_sz = 0.05
+        ref_yaw = reference[3]
+        arrow_dist = sphere_sz + arrow_sz[1]/2
+        x_pos = arrow_dist * np.array([ np.cos(ref_yaw), np.sin(ref_yaw), 0])
+        y_pos = arrow_dist * np.array([-np.sin(ref_yaw), np.cos(ref_yaw), 0])
+        ref_body = arena.worldbody.add('body', name='reference', pos=reference[:3], mocap='true')
+        ref_body.add('geom', type='sphere', size=[sphere_sz], rgba=(1, 1, 1, 1), contype=1, conaffinity=0)
+        ref_body.add('geom', pos=x_pos, euler=[np.pi/2, -ref_yaw - np.pi/2, 0], size=arrow_sz,
+                            type='cylinder', rgba=(1, 0, 0, 1), contype=1, conaffinity=0)
+        ref_body.add('geom', pos=y_pos, euler=[np.pi/2, -ref_yaw, 0], size=arrow_sz,
+                     type='cylinder', rgba=(0, 1, 0, 1), contype=1, conaffinity=0)
+        ref_body.add('geom', pos=[0, 0, arrow_dist], size=arrow_sz,
+                     type='cylinder', rgba=(0, 0, 1, 1), contype=1, conaffinity=0)
 
     drones = [make_drone(i, i/num_drones, pendulum) for i in range(num_drones)]
     height = .15
