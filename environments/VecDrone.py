@@ -49,9 +49,15 @@ base_config = {'reference': [0, 0, 3, 0],  # x,y,z,yaw
                'max_random_offset': 1.5,  # maximum position offset used for random sampling of starting position
                'angle_variance': [0.1, 0.1, 0.1],  # variance used for random angle sampling
                'vel_variance': [0.03, 0.03, 0.03],  # variance used for random velocity sampling
+               'body_size_interval': [0.1, 0.11],  # drone main body size in meters
+               'body_mass_interval': [0.95, 1],  # drone main body mass in kilograms
+               'arm_mult_interval': [0.99, 1.01],  # drone arm length in meters
                'pendulum': False,  # whether to include a pendulum on a drone
+               'pendulum_length_interval': [0.12, 0.18],  # pendulum length in meters
+               'weight_mass_interval': [0.1, 0.3],  # weight of the pendulum mass in kilograms
                'reward_fcn': distance_reward,
                'max_steps': 400,
+               'regen_env_at_steps': None,
                'render_mode': 'human',
                'window_title': 'mujoco',
                'controlled': False}
@@ -83,28 +89,36 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
 
     def __init__(self, config, **kwargs):
         utils.EzPickle.__init__(self, **kwargs)
-        width, height = 640, 480
+        self.width, self.height = 640, 480
+        self.render_mode = config.get('render_mode', None)
+        self.window_title = config.get('window_title', 'mujoco')
+        self.action_space = Box(low=0, high=1, shape=(4,), dtype=np.float64)
+
+        # get generate environment parameters
+        self.reference = config.get('reference', [0, 0, 0, 0])
         self.num_drones = config.get('num_drones', 1)
         self.pendulum = config.get('pendulum', False)
-        self.reference = config.get('reference', [0, 0, 0, 0])
-        self.window_title = config.get('window_title', 'mujoco')
+        self.body_size_interval = np.array(config.get('body_size_interval', [0.04, 0.04]))
+        self.body_mass_interval = np.array(config.get('body_mass_interval', [0.8, 1]))
+        self.arm_mult_interval = np.array(config.get('arm_mult_interval', [0.015, 0.015]))
+        self.pendulum_length_interval = np.array(config.get('pendulum_length_interval', [0.0125, 0.0125]))
+        self.weight_mass_interval = np.array(config.get('weight_mass_interval', [0.2, 0.2]))
 
-        self.action_space = Box(low=0, high=1, shape=(4, ), dtype=np.float64)
-        observation_space = Box(low=-np.inf, high=np.inf, shape=(12, ), dtype=np.float64)
-
-        model = mjcf_to_mjmodel(make_arena(self.num_drones, self.pendulum, self.reference))
+        # generate randomized parameters for each drone and save them into a list
+        self.drone_params = self.generate_drone_params()
+        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(12 + len(self.drone_params[0]),), dtype=np.float64)
+        model = mjcf_to_mjmodel(make_arena(self.drone_params, self.reference))  # create a mujoco model
         extendedEnv.__init__(
             self,
             model,
             4,
-            render_mode=config.get('render_mode', None),
-            observation_space=observation_space,
-            width=width,
-            height=height,
-            **kwargs
+            render_mode=self.render_mode,
+            observation_space=self.observation_space,
+            width=self.width,
+            height=self.height
         )
 
-        self.controlled = config.get('controlled', False)
+        self.controlled = config.get('controlled', False)  # is this environment using controlled reference?
         if self.controlled:
             print('Initializing controller')
             self.joystick = PS4Controller()  # also works with PS5 controller
@@ -112,24 +126,26 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
                 self.controlled = False
                 print('Disabling reference control')
 
+        # setup training parameters
+        self.regen_env_at_steps = config.get('regen_env_at_steps', None)
         self.start_pos = config.get('start_pos', self.reference)
-        self.max_pos_offset = config.get('max_random_offset', 0)
-        self.angle_variance = np.array(config.get('angle_variance', [0, 0, 0]))
-        self.vel_variance = np.array(config.get('vel_variance', [0, 0, 0]))
         self.max_distance = config.get('max_distance', 1)
         self.reward_fcn = config.get('reward_fcn', distance_reward)
         self.max_steps = config.get('max_steps', 400)
+        self.max_pos_offset = config.get('max_random_offset', 0)
+        self.angle_variance = np.array(config.get('angle_variance', [0, 0, 0]))
+        self.vel_variance = np.array(config.get('vel_variance', [0, 0, 0]))
 
+        # setup
+        self.total_steps = 0
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)
         self.terminated = np.zeros((self.num_drones,), dtype=np.bool)
-        self._agent_ids = set(range(self.num_drones))
-        self.dones = set()
-        self.resetted = False
 
-        VectorEnv.__init__(self, observation_space, self.action_space, self.num_drones)
-        self.reset_model()
+        # init VectorEnv for rllib and reset the model
+        VectorEnv.__init__(self, self.observation_space, self.action_space, self.num_drones)
+        print('Environment ready')
 
-    def update_reference(self):
+    def control_reference(self):
         self.joystick.poll_events()  # update joystick values
         x = self.joystick.axis_data.get(0, 0)
         y = -self.joystick.axis_data.get(1, 0)
@@ -143,19 +159,51 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         sg = np.sign(pert)
         pert = 0.1 * mag * sg * [xy_active, xy_active, zyaw_active, zyaw_active]
 
-        self.reference = self.reference + pert
+        self.move_reference_by(pert)
+
+    def move_reference_by(self, offset):
+        self.move_reference_to(self.reference + offset)
+
+    def move_reference_to(self, target):
+        self.reference = target
         self.reference[3] = (self.reference[3] + np.pi) % (2*np.pi) - np.pi
         self.reference = np.clip(self.reference, a_min=[-5, -5, 0, -np.pi], a_max=[5, 5, 6, np.pi])  # update reference
         self.data.mocap_pos[:3] = self.reference[:3]  # update reference visualization
         self.data.mocap_quat[:] = mujoco_rpy2quat([0, 0, self.reference[3]])
 
+    def generate_drone_params(self):
+        drone_params = []
+        # load parameter intervals
+        l_bs, h_bs = self.body_size_interval
+        l_bm, h_bm = self.body_mass_interval
+        l_am, h_am = self.arm_mult_interval
+        l_pl, h_pl = self.pendulum_length_interval
+        l_wm, h_wm = self.weight_mass_interval
+        # generate random values uniformly from the intervals
+        body_sizes = self.np_random.uniform(l_bs, h_bs, self.num_drones)
+        body_masses = self.np_random.uniform(l_bm, h_bm, self.num_drones)
+        arm_mults = self.np_random.uniform(l_am, h_am, self.num_drones)
+        pendulum_lens = self.np_random.uniform(l_pl, h_pl, self.num_drones)
+        weight_masses = self.np_random.uniform(l_wm, h_wm, self.num_drones)
+        # save parameters into a list of dictionaries
+        for i in range(self.num_drones):
+            params = {'body_size': body_sizes[i],
+                      'body_mass': body_masses[i],
+                      'arm_mult': arm_mults[i],
+                      'pendulum': 1*self.pendulum,
+                      'pendulum_len': self.pendulum*pendulum_lens[i],
+                      'weight_mass': self.pendulum*weight_masses[i]}
+            drone_params.append(params)
+        return drone_params
+
     def vector_step(self, actions):
         if self.controlled:
-            self.update_reference()  # move reference accordingly
+            self.control_reference()  # move reference accordingly
 
         ctrl = np.array(actions).ravel()
         self.do_simulation(ctrl, self.frame_skip)
         self.num_steps = self.num_steps + 1
+        self.total_steps += 1
         states = self._get_obs()
 
         rewards, dones, obs, infos = [], [], [], []
@@ -169,15 +217,37 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
             heading_diff = np.array((self.reference[3] - state[5] + np.pi) % (2 * np.pi) - np.pi)[None]
             # if self.controlled:
                 # print(state[5], self.reference[3], heading_diff, state[3:5])
-            obs.append(np.concatenate((self.reference[:3] - state[:3], state[3:5], heading_diff, state[6:])))
+            ref_err = np.array(self.reference[:3] - state[:3])[None].T
+            ref_err = mujoco_quat2DCM(mujoco_rpy2quat(state[3:6])).T @ ref_err
+            obs.append(np.concatenate((ref_err.squeeze(), state[3:5], heading_diff, state[6:])))
             infos.append({})
 
         if self.render_mode == 'human':
             self.render()
 
+        if self.regen_env_at_steps and self.total_steps == self.regen_env_at_steps:
+            self.total_steps = 0
+            self.reset_model(regen=True)
+            dones = np.ones(self.num_drones, dtype=bool)
+
         return obs, rewards, dones, infos
 
-    def reset_model(self):  # init the drone to start position plus some perturbation
+    def reset_model(self, regen=False):  # init the drone to start position plus some perturbation
+
+        if regen:  # regenerate parameters of the drones and restart the simulation
+            self.drone_params = self.generate_drone_params()
+            model = mjcf_to_mjmodel(make_arena(self.drone_params, self.reference))  # create a mujoco model
+            self.close()
+            extendedEnv.__init__(
+                self,
+                model,
+                4,
+                render_mode=self.render_mode,
+                observation_space=self.observation_space,
+                width=self.width,
+                height=self.height
+            )
+
         start_pos = self.start_pos
         qpos = self.init_qpos
         qvel = self.init_qvel
@@ -186,7 +256,8 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         for i in range(self.num_drones):
             direction = self.np_random.normal(size=3)
             direction /= np.linalg.norm(direction)
-            r = self.max_pos_offset*np.cbrt(self.np_random.random())
+            # r = self.max_pos_offset*np.cbrt(self.np_random.random())
+            r = self.max_pos_offset
             qpos[(7 + pos_idx_offset)*i:(7 + pos_idx_offset)*i + 3] = start_pos[:3] + r*direction
             rpy = self.np_random.normal(scale=self.angle_variance, size=3).clip(min=-2*self.angle_variance, max=2*self.angle_variance) + [0, 0, start_pos[3]]
             rpy[2] = np.pi - 2*np.pi * self.np_random.random()  # uniform yaw angle
@@ -196,6 +267,7 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)
         self.terminated = np.zeros((self.num_drones,), dtype=np.bool)
         self.set_state(qpos, qvel)
+        print('Environment reset')
         return self._get_obs()
 
     def vector_reset(self):
@@ -213,7 +285,8 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         qpos[(7 + pos_idx_offset) * index:(7 + pos_idx_offset) * index + 7] = self.init_qpos[(7 + pos_idx_offset) * index:(7 + pos_idx_offset) * index + 7]
         direction = self.np_random.normal(size=3)  # draw a random sample inside a sphere
         direction /= np.linalg.norm(direction)
-        r = self.max_pos_offset*np.cbrt(self.np_random.random())
+        # r = self.max_pos_offset*np.cbrt(self.np_random.random())
+        r = self.max_pos_offset
         qpos[(7 + pos_idx_offset) * index:(7 + pos_idx_offset) * index + 3] = start_pos[:3] + r*direction
         qvel[(6 + vel_idx_offset)*index: (6 + vel_idx_offset)*index + 6] = self.init_qvel[(6 + vel_idx_offset)*index: (6 + vel_idx_offset)*index + 6]
         rpy = self.np_random.normal(scale=self.angle_variance, size=3).clip(min=-2*self.angle_variance, max=2*self.angle_variance) + [0, 0, start_pos[3]]
@@ -233,7 +306,7 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
             angle = mujoco_quat2rpy(self.data.qpos[(7 + pos_idx_offset)*i + 3:(7 + pos_idx_offset)*i + 7])  # rpy angles
             vel = self.data.qvel[(6 + vel_idx_offset)*i:(6 + vel_idx_offset)*i + 3]  # xyz velocity
             ang_vel = self.data.qvel[(6 + vel_idx_offset)*i + 3:(6 + vel_idx_offset)*i + 6]  # rpy velocity (probably in different order)
-            obs = np.concatenate((pos, angle, vel, ang_vel))
+            obs = np.concatenate((pos, angle, vel, ang_vel, list(self.drone_params[i].values())))
             states.append(obs)  # add state to state list
 
         # cols = np.zeros((self.num_drones,), dtype=np.bool)  # collision info for every drone

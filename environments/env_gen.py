@@ -5,7 +5,7 @@ from dm_control import mujoco
 from scipy.spatial.transform import Rotation as R
 
 
-def make_drone(id=0, hue=1, pendulum=False):
+def make_drone(id=0, hue=1, params=None):
     rgba = [0, 0, 0, 1]
     rgba[:3] = hsv_to_rgb([hue, 1, 1])
     motor_tau = 0.005  # motor acts as a low pass filter with crossover frequency 1/motor_tau
@@ -20,41 +20,48 @@ def make_drone(id=0, hue=1, pendulum=False):
     model.default.geom.friction = (1, 0.5, 0.5)
     model.default.geom.margin = 0
 
-    model.default.joint.damping = 0.01
+    model.default.joint.damping = 0.3
     model.default.joint.armature = 0.0
 
-    body_size = 0.02
-    arm_size = 0.15
-    pendulum_length = 0.1 + 0.05*np.random.rand()
-    pole_mass = pendulum_length
-    weight_mass = 0.15 + 0.1*np.random.rand()
+    pendulum = params.get('pendulum', False)
+    body_size = params.get('body_size', 0.1)
+    body_mass = params.get('body_mass', 0.9)
+    arm_mult = params.get('arm_mult', 1)
+    pendulum_length = params.get('pendulum_len', 0.1)
+    weight_mass = params.get('weight_mass', 0.2)
+    pole_mass = 0.2*pendulum_length
+    arm_len = arm_mult*body_size
+
+    half_body_size = body_size/2
 
     core = model.worldbody.add('body', name='core_body_%d' % id, pos=(0, 0, 0))
-    core.add('geom', name='core_geom_%d' % id, size=(2*body_size, 2*body_size, body_size), mass=0.9, rgba=rgba)
-    core.add('geom', pos=[body_size, 0, 0], name='front_%d' % id, size=(3*body_size, 0.3*body_size, 0.3*body_size), mass=0, rgba=rgba)
-    core.add('site', name='sense', pos=(0, 0, -body_size/2))
+    core.add('geom', name='core_geom_%d' % id, size=(half_body_size, half_body_size, half_body_size/3), mass=body_mass, rgba=rgba)
+    core.add('geom', pos=[half_body_size/2, 0, 0], name='front_%d' % id, size=(1.5*half_body_size, 0.15*half_body_size, 0.15*half_body_size), mass=0, rgba=rgba)
+    core.add('site', name='sense', pos=(0, 0, -half_body_size/4))
     model.sensor.add('accelerometer', name='acc_%d' % id, site='sense')
     model.sensor.add('gyro', name='gyro_%d' % id, site='sense')
     model.sensor.add('magnetometer', name='mag_%d' % id, site='sense')
-    core.add('camera', name='dronecam_%d' % id, pos=(body_size, 0, body_size/2), euler=[0, -np.pi/2, 0])  # TODO: check angle
+    core.add('camera', name='dronecam_%d' % id, pos=(half_body_size/2, 0, half_body_size/4), euler=[0, -np.pi/2, 0])
     for i in range(4):
         theta = i * np.pi / 2 + np.pi/4
-        arm_pos = (1.4*body_size + 0.5*arm_size) * np.array([np.cos(theta), np.sin(theta), 0])
-        core.add('geom', name='arm_%d' % i, size=(arm_size, 0.005, 0.005), pos=arm_pos, euler=[0, 0, theta], mass=0.025)
-        core.add('site', name='motorsite_%d' % i, type='cylinder', pos=2.2 * arm_pos + np.array([0, 0, 0.0075]), size=(0.01, 0.0025))
-        core.add('geom', name='prop_%d' % i, type='cylinder', pos=2.2 * arm_pos + np.array([0, 0, 0.01]), size=(0.05, 0.0025), mass=0.025)
+        arm_pos = (np.sqrt(2)*half_body_size + 0.5*arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
+        rot_pos = (np.sqrt(2)*half_body_size + arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
+        prop_radius = arm_len/2.5
+        core.add('geom', name='arm_%d' % i, size=(arm_len/2, arm_len/20, arm_len/20), pos=arm_pos, euler=[0, 0, theta], mass=0.25*arm_len)
+        core.add('site', name='motorsite_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.0075]), size=(0.01, 0.0025))
+        core.add('geom', name='prop_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.01]), size=(prop_radius, 0.0025), mass=2.5*prop_radius**2)
         model.actuator.add('general', name='motor_%d' % i, site='motorsite_%d' % i, gear=(0, 0, 6, 0, 0, 0.6*(-1)**i),
                            ctrllimited=True, ctrlrange=(0, 1), dyntype='filter',
                            dynprm=[motor_tau, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     if pendulum:
-        pend = core.add('body', name='pendulum', pos=(0, 0, 0))
-        pend.add('joint', type='ball', pos=(0, 0, -body_size))
+        pend = core.add('body', name='pendulum', pos=(0, 0, -half_body_size/3))
+        pend.add('joint', type='ball', pos=(0, 0, 0))
         pend.add('geom', size=(0.005, pendulum_length), pos=(0, 0, -pendulum_length), type='cylinder', mass=pole_mass)
-        pend.add('geom', pos=(0, 0, -2*pendulum_length), type='sphere', size=[0.05], mass=weight_mass)
+        pend.add('geom', pos=(0, 0, -2*pendulum_length), type='sphere', size=[0.1*np.cbrt(weight_mass)], mass=weight_mass)
     return model
 
 
-def make_arena(num_drones=1, pendulum=False, reference=None):
+def make_arena(drone_params=[None], reference=None):
     arena = mjcf.RootElement(model='arena')
 
     arena.size.nconmax = 1000  # set maximum number of collisions
@@ -109,7 +116,8 @@ def make_arena(num_drones=1, pendulum=False, reference=None):
         ref_body.add('geom', pos=[0, 0, arrow_dist], size=arrow_sz,
                      type='cylinder', rgba=(0, 0, 1, 1), contype=1, conaffinity=0)
 
-    drones = [make_drone(i, i/num_drones, pendulum) for i in range(num_drones)]
+    num_drones = len(drone_params)
+    drones = [make_drone(i, i/num_drones, drone_params[i]) for i in range(num_drones)]
     height = .15
     margin = 0.5
     sz = np.ceil(np.sqrt(num_drones)).astype(np.long)
