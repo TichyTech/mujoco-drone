@@ -39,13 +39,15 @@ def evaluate_trajectory(env, algo, trajectory=[[0, 0, 3, 0]]*400):
     env.render()
     total_reward = 0.0
     observations = [obs[0]]
+    prev_action = [[0,0,0,0]]
     rewards = []
     for x in trajectory:
         env.move_reference_to(x)
         if lstm:  # pass the state as well
-            action, state, _ = algo.compute_single_action(obs[0], state)
+            action, state, _ = algo.compute_single_action(obs[0], state, prev_action=prev_action)
         else:
-            action = algo.compute_single_action(obs[0])
+            action = algo.compute_single_action(obs[0], prev_action=prev_action)
+        prev_action = [action]
         obs, reward, done, info = env.vector_step([action])
         observations.append(obs[0])
         rewards.append(reward[0])
@@ -75,7 +77,7 @@ def gen_ramp_trajectory(start_time=5, duration=10, start_pos=[0, 0, 3, 0], end_p
 
 
 model_dir = 'models/PPO/RMA_model/'
-checkpoint_to_load = 'checkpoints/checkpoint_000090'
+checkpoint_to_load = 'checkpoints/checkpoint_000300'
 load_checkpoint = True
 
 # environment configuration
