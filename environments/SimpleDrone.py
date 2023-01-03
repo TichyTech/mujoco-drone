@@ -47,7 +47,7 @@ class SimpleDrone(extendedEnv, utils.EzPickle):
         # })
         observation_space = Box(low=-np.inf, high=np.inf, shape=(self.num_drones*6, ), dtype=np.float64)
         self.action_space = Box(low=0.5, high=1, shape=(self.num_drones * 4,), dtype=np.float64)
-        model = mjcf_to_mjmodel(make_arena(self.num_drones))
+        model = mjcf_to_mjmodel(make_arena([None]*self.num_drones))
         extendedEnv.__init__(
             self,
             model,
