@@ -49,9 +49,9 @@ base_config = {'reference': [0, 0, 3, 0],  # x,y,z,yaw
                'max_random_offset': 1.5,  # maximum position offset used for random sampling of starting position
                'angle_variance': [0.1, 0.1, 0.1],  # variance used for random angle sampling
                'vel_variance': [0.03, 0.03, 0.03],  # variance used for random velocity sampling
-               'body_size_interval': [0.1, 0.11],  # drone main body size in meters
-               'body_mass_interval': [0.95, 1],  # drone main body mass in kilograms
-               'arm_mult_interval': [0.99, 1.01],  # drone arm length in meters
+               'body_size_interval': [0.09, 0.14],  # drone main body size in meters
+               'body_mass_interval': [0.95, 1.05],  # drone main body mass in kilograms
+               'arm_mult_interval': [0.95, 1.05],  # drone arm length in meters
                'pendulum': False,  # whether to include a pendulum on a drone
                'pendulum_length_interval': [0.12, 0.18],  # pendulum length in meters
                'weight_mass_interval': [0.1, 0.3],  # weight of the pendulum mass in kilograms
@@ -106,7 +106,9 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
 
         # generate randomized parameters for each drone and save them into a list
         self.drone_params = self.generate_drone_params()
-        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(12 + len(self.drone_params[0]),), dtype=np.float64)
+        self.num_states = 15
+        self.num_params = len(self.drone_params[0])
+        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(self.num_states + self.num_params,), dtype=np.float64)
         model = mjcf_to_mjmodel(make_arena(self.drone_params, self.reference))  # create a mujoco model
         extendedEnv.__init__(
             self,
@@ -172,6 +174,7 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         self.data.mocap_quat[:] = mujoco_rpy2quat([0, 0, self.reference[3]])
 
     def generate_drone_params(self):
+        # generate a list of per-drone model parameters
         drone_params = []
         # load parameter intervals
         l_bs, h_bs = self.body_size_interval
@@ -256,8 +259,8 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         for i in range(self.num_drones):
             direction = self.np_random.normal(size=3)
             direction /= np.linalg.norm(direction)
-            # r = self.max_pos_offset*np.cbrt(self.np_random.random())
-            r = self.max_pos_offset
+            r = self.max_pos_offset*np.cbrt(self.np_random.random())
+            # r = self.max_pos_offset
             qpos[(7 + pos_idx_offset)*i:(7 + pos_idx_offset)*i + 3] = start_pos[:3] + r*direction
             rpy = self.np_random.normal(scale=self.angle_variance, size=3).clip(min=-2*self.angle_variance, max=2*self.angle_variance) + [0, 0, start_pos[3]]
             rpy[2] = np.pi - 2*np.pi * self.np_random.random()  # uniform yaw angle
@@ -285,8 +288,8 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         qpos[(7 + pos_idx_offset) * index:(7 + pos_idx_offset) * index + 7] = self.init_qpos[(7 + pos_idx_offset) * index:(7 + pos_idx_offset) * index + 7]
         direction = self.np_random.normal(size=3)  # draw a random sample inside a sphere
         direction /= np.linalg.norm(direction)
-        # r = self.max_pos_offset*np.cbrt(self.np_random.random())
-        r = self.max_pos_offset
+        r = self.max_pos_offset*np.cbrt(self.np_random.random())
+        # r = self.max_pos_offset
         qpos[(7 + pos_idx_offset) * index:(7 + pos_idx_offset) * index + 3] = start_pos[:3] + r*direction
         qvel[(6 + vel_idx_offset)*index: (6 + vel_idx_offset)*index + 6] = self.init_qvel[(6 + vel_idx_offset)*index: (6 + vel_idx_offset)*index + 6]
         rpy = self.np_random.normal(scale=self.angle_variance, size=3).clip(min=-2*self.angle_variance, max=2*self.angle_variance) + [0, 0, start_pos[3]]
@@ -306,7 +309,9 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
             angle = mujoco_quat2rpy(self.data.qpos[(7 + pos_idx_offset)*i + 3:(7 + pos_idx_offset)*i + 7])  # rpy angles
             vel = self.data.qvel[(6 + vel_idx_offset)*i:(6 + vel_idx_offset)*i + 3]  # xyz velocity
             ang_vel = self.data.qvel[(6 + vel_idx_offset)*i + 3:(6 + vel_idx_offset)*i + 6]  # rpy velocity (probably in different order)
-            obs = np.concatenate((pos, angle, vel, ang_vel, list(self.drone_params[i].values())))
+            acc = self.data.sensordata[i*3:i*3+3]  # accelerometer data (given there is only one sensor on each drone)
+            obs = np.concatenate((pos, angle, vel, ang_vel, acc, list(self.drone_params[i].values())))
+            assert len(obs) == self.num_states + self.num_params
             states.append(obs)  # add state to state list
 
         # cols = np.zeros((self.num_drones,), dtype=np.bool)  # collision info for every drone

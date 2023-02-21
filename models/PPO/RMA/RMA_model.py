@@ -29,20 +29,36 @@ class RMA_model(TorchModelV2, nn.Module):
         )
         nn.Module.__init__(self)
 
+        custom_config = model_config['custom_model_config']
+        self.num_states = custom_config['num_states']
+        self.num_params = custom_config['num_params']
+        self.num_actions = custom_config['num_actions']
+        self.param_embed_dim = custom_config['param_embed_dim']
+        assert obs_space.shape[0] == self.num_states + self.num_params  # assert we are using correct environment/model
+        assert action_space.shape[0] == self.num_actions
+
         self.param_encoder = nn.Sequential(
-            SlimFC(in_size=6, out_size=64, initializer=normc_initializer(1), activation_fn='tanh'),
+            SlimFC(in_size=self.num_params, out_size=64, initializer=normc_initializer(1), activation_fn='tanh'),
             SlimFC(in_size=64, out_size=64, initializer=normc_initializer(1), activation_fn='tanh'),
-            SlimFC(in_size=64, out_size=12, initializer=normc_initializer(1), activation_fn='tanh'),
+            SlimFC(in_size=64, out_size=self.param_embed_dim, initializer=normc_initializer(1), activation_fn='tanh'),
         )
 
+        hidden_in_dim = self.num_states + self.num_actions + self.param_embed_dim
         self._hidden_layers = nn.Sequential(
-            SlimFC(in_size=28, out_size=256, initializer=normc_initializer(1), activation_fn='tanh'),
-            SlimFC(in_size=256, out_size=256, initializer=normc_initializer(1), activation_fn='tanh'),
+            SlimFC(in_size=hidden_in_dim, out_size=256, initializer=normc_initializer(1), activation_fn='tanh'),
+            SlimFC(in_size=256, out_size=128, initializer=normc_initializer(1), activation_fn='tanh'),
+            SlimFC(in_size=128, out_size=128, initializer=normc_initializer(1), activation_fn='tanh'),
+            SlimFC(in_size=128, out_size=64, initializer=normc_initializer(1), activation_fn='tanh'),
+            SlimFC(in_size=64, out_size=64, initializer=normc_initializer(1), activation_fn='tanh'),
         )
 
-        self._logits = SlimFC(in_size=256, out_size=num_outputs, initializer=normc_initializer(0.01), activation_fn=None)
+        self._logits = nn.Sequential(
+            SlimFC(in_size=64, out_size=32, initializer=normc_initializer(0.01), activation_fn=None),
+            SlimFC(in_size=32, out_size=32, initializer=normc_initializer(0.01), activation_fn=None),
+            SlimFC(in_size=32, out_size=num_outputs, initializer=normc_initializer(0.01), activation_fn=None)
+        )
 
-        self._value_branch = SlimFC(in_size=256, out_size=1, initializer=normc_initializer(0.01), activation_fn=None)
+        self._value_branch = SlimFC(in_size=64, out_size=1, initializer=normc_initializer(0.01), activation_fn=None)
 
         self.view_requirements = {
             "obs": ViewRequirement(shift=0, space=self.obs_space),
@@ -69,8 +85,8 @@ class RMA_model(TorchModelV2, nn.Module):
         prev_actions = input_dict["prev_actions"].float()
         obs = obs.reshape(obs.shape[0], -1)
         prev_actions = prev_actions.reshape(prev_actions.shape[0], -1)
-        flat_in = torch.cat((obs[:, :12], prev_actions), dim=-1)
-        drone_params = obs[:, 12:]
+        flat_in = torch.cat((obs[:, :self.num_states], prev_actions), dim=-1)
+        drone_params = obs[:, self.num_states:]
         # set network training mode
         self.param_encoder.train(mode=is_training)
         self._hidden_layers.train(mode=is_training)

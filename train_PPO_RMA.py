@@ -13,23 +13,26 @@ def custom_reward(env, state, action, num_steps):
     ref = env.reference
     heading_err = np.linalg.norm(state[5] - ref[3])
     heading_err = ((heading_err + np.pi) % (2 * np.pi) - np.pi)**2
+    tilt_mag = (np.array(state[3:5]) ** 2).sum()
     pos_err = ((state[:3] - ref[:3]) ** 2).sum()
     ctrl_effort = (np.array(action) ** 2).sum()
     rot_energy = (np.array(state[6:9])**2).sum()
     trans_energy = (np.array(state[3:6])**2).sum()
-    too_far = pos_err > env.max_distance**2 - 0.5
+    too_far = pos_err > env.max_distance**2 - 1
     # reward = 1 - (1 + num_steps/100)*(pos_err + 0*heading_err) - 0*ctrl_effort - 100*too_far*(pos_err-env.max_distance**2)
     # reward += 10*(pos_err < 0.1)*(0.1 - pos_err)
-    reward = 4 - 3*pos_err - 0.2*heading_err - 0*rot_energy - 0*trans_energy - 0*ctrl_effort - 100*too_far*(pos_err - env.max_distance**2 + 0.5)**2
+    # reward = 3 - 2*pos_err - 0.2*heading_err - 0.5*rot_energy - 0.2*trans_energy - 0.2*ctrl_effort - 50*too_far*(pos_err - env.max_distance**2 + 1)**2
+    # reward += -0.2*tilt_mag
+    reward = 3 -2*pos_err -heading_err -10*too_far*pos_err
     return reward
 
 
 model_dir = 'models/PPO/RMA/'
-checkpoint_to_load = 'checkpoints/checkpoint_000050'
-load_checkpoint = False
+checkpoint_to_load = 'checkpoints/checkpoint_000150'
+load_checkpoint = 0
 
 # training configuration
-num_epochs = 300
+num_epochs = 1000
 train_vis = True  # toggle training process rendering
 train_drones = 64  # number of drones per env
 num_processes = 8  # number parallel envs used for training
@@ -56,12 +59,15 @@ if not train_vis:
 ModelCatalog.register_custom_model("RMA_model", RMA_model)
 model_config = {
     "custom_model": "RMA_model",
-    "custom_model_config": {"fcnet_hiddens": [256, 256]},
+    "custom_model_config": {'num_states': 15,
+                            'num_params': 6,
+                            'num_actions': 4,
+                            'param_embed_dim': 12},
 }
 
 # PPO configuration
 algo_config = PPOConfig() \
-    .training(gamma=0.99, lr=0.005, sgd_minibatch_size=train_batch_size // 4,
+    .training(gamma=0.99, lr=0.002, sgd_minibatch_size=train_batch_size // 4,
               train_batch_size=train_batch_size, model=model_config) \
     .resources(num_gpus=1) \
     .rollouts(num_rollout_workers=num_processes, rollout_fragment_length=rollout_length, recreate_failed_workers=False)\
@@ -80,4 +86,3 @@ if __name__ == '__main__':
     # eval_env = VecDrone(eval_env_config)  # create an environment for evaluation
     train(algo, num_epochs, model_dir)
     algo.cleanup()
-

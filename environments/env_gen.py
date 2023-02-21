@@ -8,6 +8,8 @@ from scipy.spatial.transform import Rotation as R
 def make_drone(id=0, hue=1, params=None):
     rgba = [0, 0, 0, 1]
     rgba[:3] = hsv_to_rgb([hue, 1, 1])
+    rgba_transparent = [0, 0, 0, 0.6]
+    rgba_transparent[:3] = rgba[:3]
     motor_tau = 0.005  # motor acts as a low pass filter with crossover frequency 1/motor_tau
 
     model = mjcf.RootElement(model='drone_%d' % id)
@@ -20,7 +22,7 @@ def make_drone(id=0, hue=1, params=None):
     model.default.geom.friction = (1, 0.5, 0.5)
     model.default.geom.margin = 0
 
-    model.default.joint.damping = 0.3
+    model.default.joint.damping = 0.2
     model.default.joint.armature = 0.0
 
     pendulum = params.get('pendulum', False)
@@ -39,24 +41,24 @@ def make_drone(id=0, hue=1, params=None):
     core.add('geom', pos=[half_body_size/2, 0, 0], name='front_%d' % id, size=(1.5*half_body_size, 0.15*half_body_size, 0.15*half_body_size), mass=0, rgba=rgba)
     core.add('site', name='sense', pos=(0, 0, -half_body_size/4))
     model.sensor.add('accelerometer', name='acc_%d' % id, site='sense')
-    model.sensor.add('gyro', name='gyro_%d' % id, site='sense')
-    model.sensor.add('magnetometer', name='mag_%d' % id, site='sense')
-    core.add('camera', name='dronecam_%d' % id, pos=(half_body_size/2, 0, half_body_size/4), euler=[0, -np.pi/2, 0])
+    # model.sensor.add('gyro', name='gyro_%d' % id, site='sense')
+    # model.sensor.add('magnetometer', name='mag_%d' % id, site='sense')
+    # core.add('camera', name='dronecam_%d' % id, pos=(half_body_size/2, 0, half_body_size/4), euler=[0, -np.pi/2, 0])
     for i in range(4):
         theta = i * np.pi / 2 + np.pi/4
         arm_pos = (np.sqrt(2)*half_body_size + 0.5*arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
         rot_pos = (np.sqrt(2)*half_body_size + arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
         prop_radius = arm_len/2.5
-        core.add('geom', name='arm_%d' % i, size=(arm_len/2, arm_len/20, arm_len/20), pos=arm_pos, euler=[0, 0, theta], mass=0.25*arm_len)
-        core.add('site', name='motorsite_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.0075]), size=(0.01, 0.0025))
-        core.add('geom', name='prop_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.01]), size=(prop_radius, 0.0025), mass=2.5*prop_radius**2)
+        core.add('geom', name='arm_%d' % i, size=(arm_len/2, arm_len/20, arm_len/20), pos=arm_pos, euler=[0, 0, theta], mass=0.25*arm_len, rgba=[0.3, 0.3, 0.3, 1])
+        core.add('site', name='motorsite_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.0075]), size=(0.01, 0.0025), rgba=[0.1, 0.1, 0.1, 1])
+        core.add('geom', name='prop_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.01]), size=(prop_radius, 0.0025), mass=2.5*prop_radius**2, rgba=rgba_transparent)
         model.actuator.add('general', name='motor_%d' % i, site='motorsite_%d' % i, gear=(0, 0, 6, 0, 0, 0.6*(-1)**i),
                            ctrllimited=True, ctrlrange=(0, 1), dyntype='filter',
                            dynprm=[motor_tau, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     if pendulum:
         pend = core.add('body', name='pendulum', pos=(0, 0, -half_body_size/3))
         pend.add('joint', type='ball', pos=(0, 0, 0))
-        pend.add('geom', size=(0.005, pendulum_length), pos=(0, 0, -pendulum_length), type='cylinder', mass=pole_mass)
+        pend.add('geom', size=(0.005, pendulum_length), pos=(0, 0, -pendulum_length), type='cylinder', mass=pole_mass, rgba=[0.3, 0.3, 0.3, 1])
         pend.add('geom', pos=(0, 0, -2*pendulum_length), type='sphere', size=[0.1*np.cbrt(weight_mass)], mass=weight_mass)
     return model
 
