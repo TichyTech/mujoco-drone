@@ -15,12 +15,13 @@ def save_model_config(model_dir, model_config):
 
 
 def train(algo, num_epochs, model_dir='models', checkpoint_ep=10):
+    start = time()
     for ep in range(num_epochs):
-        start = time()
         results = algo.train()
         mean_action_reward = np.sum(results['hist_stats']['episode_reward']) / np.sum(results['hist_stats']['episode_lengths'])
-        print("Epoch {:d} took {:.2f} seconds; avg. episode reward={:.3f}, avg. episode length={:.2f}, avg. action reward={:.2f}".format(ep + 1, results['time_this_iter_s'],
-                                                                          results['episode_reward_mean'], results['episode_len_mean'], mean_action_reward))
+        elapsed = int(time() - start)
+        print("Elapsed time: {:3d}h {:2d}m; ep. {:4d}, avg.e.r.={:.3f}, avg. l={:.2f}, avg.a.r.={:.2f}".format(elapsed//3600, (elapsed//60)%60, ep + 1,
+              results['episode_reward_mean'], results['episode_len_mean'], mean_action_reward))
         algo.evaluate()
         if (ep + 1) % checkpoint_ep == 0:
             print("Saving checkpoint to {}".format(algo.save(model_dir + 'checkpoints')))  # save checkpoint
