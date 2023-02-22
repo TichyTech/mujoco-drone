@@ -26,14 +26,14 @@ def custom_reward(env, state, action, num_steps):
     reward = 3 -2*pos_err -heading_err -10*too_far*pos_err - 0.2*ctrl_effort
     return reward
 
-
+# checkpoint settings
 model_dir = 'models/PPO/RMA/'
 checkpoint_to_load = 'checkpoints/checkpoint_000150'
-load_checkpoint = 0
+load_checkpoint = False
 
 # training configuration
-num_epochs = 400
-train_vis = True  # toggle training process rendering
+num_epochs = 200
+train_vis = 1  # visualize one training environment
 train_drones = 64  # number of drones per env
 num_processes = 8  # number parallel envs used for training
 rollout_length = 256  # length of individual episodes used in training
@@ -52,14 +52,13 @@ train_env_config['reward_fcn'] = custom_reward
 train_env_config['num_drones'] = train_drones  # set number of drones used per environment for training in parallel
 train_env_config['window_title'] = 'training'
 train_env_config['regen_env_at_steps'] = 2000  # regenerate simulation after 2000 timesteps
-if not train_vis:
-    train_env_config['render_mode'] = None
+train_env_config['train_vis'] = train_vis
 
 # model configuration
 ModelCatalog.register_custom_model("RMA_model", RMA_model)
 model_config = {
     "custom_model": "RMA_model",
-    "custom_model_config": {'num_states': 15,
+    "custom_model_config": {'num_states': 12,
                             'num_params': 6,
                             'num_actions': 4,
                             'param_embed_dim': 12},
@@ -75,7 +74,7 @@ algo_config = PPOConfig() \
     .environment(env=VecDrone, env_config=train_env_config)\
     .evaluation(evaluation_duration='auto', evaluation_interval=1, evaluation_parallel_to_training=True,
                 evaluation_config={'env_config': eval_env_config, 'explore': False}, evaluation_num_workers=1)\
-    .debugging(seed=42)
+    .debugging(seed=42)\
 
 
 if __name__ == '__main__':
