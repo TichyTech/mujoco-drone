@@ -23,7 +23,7 @@ def custom_reward(env, state, action, num_steps):
     # reward += 10*(pos_err < 0.1)*(0.1 - pos_err)
     # reward = 3 - 2*pos_err - 0.2*heading_err - 0.5*rot_energy - 0.2*trans_energy - 0.2*ctrl_effort - 50*too_far*(pos_err - env.max_distance**2 + 1)**2
     # reward += -0.2*tilt_mag
-    reward = 3 -2*pos_err -heading_err -10*too_far*pos_err
+    reward = 3 -2*pos_err -heading_err -10*too_far*pos_err - 0.2*ctrl_effort
     return reward
 
 
@@ -32,7 +32,7 @@ checkpoint_to_load = 'checkpoints/checkpoint_000150'
 load_checkpoint = 0
 
 # training configuration
-num_epochs = 1000
+num_epochs = 400
 train_vis = True  # toggle training process rendering
 train_drones = 64  # number of drones per env
 num_processes = 8  # number parallel envs used for training
@@ -67,7 +67,7 @@ model_config = {
 
 # PPO configuration
 algo_config = PPOConfig() \
-    .training(gamma=0.99, lr=0.002, sgd_minibatch_size=train_batch_size // 4,
+    .training(gamma=0.99, lr=0.001, sgd_minibatch_size=train_batch_size // 4,
               train_batch_size=train_batch_size, model=model_config) \
     .resources(num_gpus=1) \
     .rollouts(num_rollout_workers=num_processes, rollout_fragment_length=rollout_length, recreate_failed_workers=False)\
@@ -75,6 +75,7 @@ algo_config = PPOConfig() \
     .environment(env=VecDrone, env_config=train_env_config)\
     .evaluation(evaluation_duration='auto', evaluation_interval=1, evaluation_parallel_to_training=True,
                 evaluation_config={'env_config': eval_env_config, 'explore': False}, evaluation_num_workers=1)\
+    .debugging(seed=42)
 
 
 if __name__ == '__main__':
@@ -85,4 +86,4 @@ if __name__ == '__main__':
 
     # eval_env = VecDrone(eval_env_config)  # create an environment for evaluation
     train(algo, num_epochs, model_dir)
-    algo.cleanup()
+    algo.stop()

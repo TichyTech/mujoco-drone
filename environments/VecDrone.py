@@ -45,7 +45,7 @@ def distance_reward(env, state, action, num_steps):
 
 base_config = {'reference': [0, 0, 3, 0],  # x,y,z,yaw
                'start_pos': [0, 0, 3, 0],  # x,y,z,yaw
-               'max_distance': 2.5,
+               'max_distance': 2.5,  # if drone is further from reference than this number, terminate episode
                'max_random_offset': 1.5,  # maximum position offset used for random sampling of starting position
                'angle_variance': [0.1, 0.1, 0.1],  # variance used for random angle sampling
                'vel_variance': [0.03, 0.03, 0.03],  # variance used for random velocity sampling
@@ -56,11 +56,12 @@ base_config = {'reference': [0, 0, 3, 0],  # x,y,z,yaw
                'pendulum_length_interval': [0.12, 0.18],  # pendulum length in meters
                'weight_mass_interval': [0.1, 0.3],  # weight of the pendulum mass in kilograms
                'reward_fcn': distance_reward,
-               'max_steps': 400,
-               'regen_env_at_steps': None,
+               'max_steps': 400,  # maximum length of a single episode
+               'regen_env_at_steps': None,  # after this many (total) steps, regenerate drone model parameters
                'render_mode': 'human',
                'window_title': 'mujoco',
-               'controlled': False}
+               'controlled': False  # whether this instance of env has externally controller reference (for evaluation)
+}
 
 
 def mujoco_quat2DCM(quat):
@@ -104,10 +105,14 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         self.pendulum_length_interval = np.array(config.get('pendulum_length_interval', [0.0125, 0.0125]))
         self.weight_mass_interval = np.array(config.get('weight_mass_interval', [0.2, 0.2]))
 
+        # set random number generator seed for reproducibility
+        rng, seed = utils.seeding.np_random(seed=config.worker_index)
+        self.np_random = rng
+
         # generate randomized parameters for each drone and save them into a list
         self.drone_params = self.generate_drone_params()
-        self.num_states = 15
         self.num_params = len(self.drone_params[0])
+        self.num_states = 15
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(self.num_states + self.num_params,), dtype=np.float64)
         model = mjcf_to_mjmodel(make_arena(self.drone_params, self.reference))  # create a mujoco model
         extendedEnv.__init__(
@@ -143,7 +148,7 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)
         self.terminated = np.zeros((self.num_drones,), dtype=np.bool)
 
-        # init VectorEnv for rllib and reset the model
+        # init VectorEnv for rllib
         VectorEnv.__init__(self, self.observation_space, self.action_space, self.num_drones)
         print('Environment ready')
 
@@ -220,9 +225,13 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
             heading_diff = np.array((self.reference[3] - state[5] + np.pi) % (2 * np.pi) - np.pi)[None]
             # if self.controlled:
                 # print(state[5], self.reference[3], heading_diff, state[3:5])
-            ref_err = np.array(self.reference[:3] - state[:3])[None].T
-            ref_err = mujoco_quat2DCM(mujoco_rpy2quat(state[3:6])).T @ ref_err
-            obs.append(np.concatenate((ref_err.squeeze(), state[3:5], heading_diff, state[6:])))
+            glob_ref_err = np.array(self.reference[:3] - state[:3])[None].T
+            loc_ref_err = mujoco_quat2DCM(mujoco_rpy2quat(state[3:6])).T @ glob_ref_err  # reference direction in local frame
+            glob_vel = np.array(state[6:9])[None].T
+            loc_vel = mujoco_quat2DCM(mujoco_rpy2quat(state[3:6])).T @ glob_vel  # velocity in local frame
+            glob_ang_vel = np.array(state[9:12])[None].T
+            loc_ang_vel = mujoco_quat2DCM(mujoco_rpy2quat(state[3:6])).T @ glob_ang_vel
+            obs.append(np.concatenate((loc_ref_err.squeeze(), state[3:5], heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), state[12:])))
             infos.append({})
 
         if self.render_mode == 'human':
@@ -275,6 +284,7 @@ class VecDrone(extendedEnv, VectorEnv, utils.EzPickle):
 
     def vector_reset(self):
         ob = self.reset_model()
+        print('Vector reset')
         return ob
 
     def reset_at(self, index):

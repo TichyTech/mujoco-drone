@@ -12,6 +12,8 @@ from ray.rllib.policy.view_requirement import ViewRequirement
 torch, nn = try_import_torch()
 logger = logging.getLogger(__name__)
 
+torch.random.manual_seed(42)
+
 
 class RMA_model(TorchModelV2, nn.Module):
     """Generic fully connected network."""
@@ -44,17 +46,15 @@ class RMA_model(TorchModelV2, nn.Module):
         )
 
         hidden_in_dim = self.num_states + self.num_actions + self.param_embed_dim
+        # hidden_in_dim = self.num_states
         self._hidden_layers = nn.Sequential(
             SlimFC(in_size=hidden_in_dim, out_size=256, initializer=normc_initializer(1), activation_fn='tanh'),
             SlimFC(in_size=256, out_size=128, initializer=normc_initializer(1), activation_fn='tanh'),
-            SlimFC(in_size=128, out_size=128, initializer=normc_initializer(1), activation_fn='tanh'),
             SlimFC(in_size=128, out_size=64, initializer=normc_initializer(1), activation_fn='tanh'),
-            SlimFC(in_size=64, out_size=64, initializer=normc_initializer(1), activation_fn='tanh'),
         )
 
         self._logits = nn.Sequential(
             SlimFC(in_size=64, out_size=32, initializer=normc_initializer(0.01), activation_fn=None),
-            SlimFC(in_size=32, out_size=32, initializer=normc_initializer(0.01), activation_fn=None),
             SlimFC(in_size=32, out_size=num_outputs, initializer=normc_initializer(0.01), activation_fn=None)
         )
 
@@ -86,6 +86,7 @@ class RMA_model(TorchModelV2, nn.Module):
         obs = obs.reshape(obs.shape[0], -1)
         prev_actions = prev_actions.reshape(prev_actions.shape[0], -1)
         flat_in = torch.cat((obs[:, :self.num_states], prev_actions), dim=-1)
+        # flat_in = obs[:, :self.num_states]
         drone_params = obs[:, self.num_states:]
         # set network training mode
         self.param_encoder.train(mode=is_training)
@@ -93,6 +94,7 @@ class RMA_model(TorchModelV2, nn.Module):
         # forward pass
         z = self.param_encoder(drone_params)
         self._features = self._hidden_layers(torch.cat((flat_in, z), dim=-1))
+        # self._features = self._hidden_layers(flat_in)
         logits = self._logits(self._features)
         return logits, state
 
