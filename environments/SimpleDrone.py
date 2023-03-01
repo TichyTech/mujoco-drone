@@ -1,8 +1,8 @@
 import numpy as np
-from gym import utils
+from gymnasium import utils
 from .mujoco_env_custom import extendedEnv
 from .env_gen import make_arena, mjcf_to_mjmodel
-from gym.spaces import Box
+from gymnasium.spaces import Box
 from scipy.spatial.transform import Rotation as R
 from typing import Optional
 
@@ -35,16 +35,7 @@ class SimpleDrone(extendedEnv, utils.EzPickle):
         #         'vel': Box(low=-np.inf, high=np.inf, shape=(self.num_drones*6, ), dtype=np.float64),
         #         'rgbs': Box(low=0, high=255, shape=(self.num_drones, height, width, 3), dtype=np.uint8)
         #     })
-        # else:
-        #     observation_space = Dict({
-        #         'pos': Box(low=-np.inf, high=np.inf, shape=(self.num_drones * 7,), dtype=np.float64),
-        #         'vel': Box(low=-np.inf, high=np.inf, shape=(self.num_drones * 6,), dtype=np.float64)
-        #     })
 
-        # observation_space = Dict({
-        #     'pos': Box(low=-np.inf, high=np.inf, shape=(self.num_drones * 3,), dtype=np.float64),
-        #     'angles': Box(low=-np.pi, high=np.pi, shape=(self.num_drones * 3,), dtype=np.float64)
-        # })
         observation_space = Box(low=-np.inf, high=np.inf, shape=(self.num_drones*6, ), dtype=np.float64)
         self.action_space = Box(low=0.5, high=1, shape=(self.num_drones * 4,), dtype=np.float64)
         model = mjcf_to_mjmodel(make_arena([None]*self.num_drones))
