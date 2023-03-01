@@ -10,7 +10,6 @@ def make_drone(id=0, hue=1, params=None):
     rgba[:3] = hsv_to_rgb([hue, 1, 1])
     rgba_transparent = [0, 0, 0, 0.6]
     rgba_transparent[:3] = rgba[:3]
-    motor_tau = 0.005  # motor acts as a low pass filter with crossover frequency 1/motor_tau
 
     model = mjcf.RootElement(model='drone_%d' % id)
 
@@ -22,23 +21,23 @@ def make_drone(id=0, hue=1, params=None):
     model.default.geom.friction = (1, 0.5, 0.5)
     model.default.geom.margin = 0
 
-    model.default.joint.damping = 0.2
+    model.default.joint.damping = 0.1
     model.default.joint.armature = 0.0
 
-    pendulum = params.get('pendulum', False)
-    body_size = params.get('body_size', 0.1)
     body_mass = params.get('body_mass', 0.9)
-    arm_mult = params.get('arm_mult', 1)
+    motor_tau = params.get('motor_tau', 0.15)  # motor acts as a low pass filter with crossover frequency 1/motor_tau
+    motor_force = params.get('motor_force', 7)
+    arm_len = params.get('arm_len', 0.15)
+    pendulum = params.get('pendulum', False)
     pendulum_length = params.get('pendulum_len', 0.1)
     weight_mass = params.get('weight_mass', 0.2)
     pole_mass = 0.2*pendulum_length
-    arm_len = arm_mult*body_size
 
-    half_body_size = body_size/2
+    half_body_size = 0.05
 
     core = model.worldbody.add('body', name='core_body_%d' % id, pos=(0, 0, 0))
     core.add('geom', name='core_geom_%d' % id, size=(half_body_size, half_body_size, half_body_size/3), mass=body_mass, rgba=rgba)
-    core.add('geom', pos=[half_body_size/2, 0, 0], name='front_%d' % id, size=(1.5*half_body_size, 0.15*half_body_size, 0.15*half_body_size), mass=0, rgba=rgba)
+    core.add('geom', pos=[half_body_size + half_body_size/3, 0, 0], name='front_%d' % id, size=(half_body_size/3, 0.15*half_body_size, 0.15*half_body_size), mass=0, rgba=rgba)
     core.add('site', name='sense', pos=(0, 0, -half_body_size/4))
     model.sensor.add('accelerometer', name='acc_%d' % id, site='sense')
     # model.sensor.add('gyro', name='gyro_%d' % id, site='sense')
@@ -48,11 +47,12 @@ def make_drone(id=0, hue=1, params=None):
         theta = i * np.pi / 2 + np.pi/4
         arm_pos = (np.sqrt(2)*half_body_size + 0.5*arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
         rot_pos = (np.sqrt(2)*half_body_size + arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
-        prop_radius = arm_len/2.5
+        prop_radius = arm_len/1.5
         core.add('geom', name='arm_%d' % i, size=(arm_len/2, arm_len/20, arm_len/20), pos=arm_pos, euler=[0, 0, theta], mass=0.25*arm_len, rgba=[0.3, 0.3, 0.3, 1])
-        core.add('site', name='motorsite_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.0075]), size=(0.01, 0.0025), rgba=[0.1, 0.1, 0.1, 1])
-        core.add('geom', name='prop_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.01]), size=(prop_radius, 0.0025), mass=2.5*prop_radius**2, rgba=rgba_transparent)
-        model.actuator.add('general', name='motor_%d' % i, site='motorsite_%d' % i, gear=(0, 0, 6, 0, 0, 0.6*(-1)**i),
+        core.add('site', name='motorsite_%d' % i, type='cylinder', pos=rot_pos, size=(0.015, arm_len/20), rgba=[0.3, 0.3, 0.3, 3])
+        core.add('geom', name='motor_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.015]), size=(0.01, 0.01), rgba=[0.1, 0.1, 0.1, 1], mass=0.05)
+        core.add('geom', name='prop_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.025]), size=(prop_radius, 0.0025), mass=2.5*prop_radius**2, rgba=rgba_transparent)
+        model.actuator.add('general', name='motor_%d' % i, site='motorsite_%d' % i, gear=(0, 0, motor_force, 0, 0, motor_force/1000*(-1)**i),
                            ctrllimited=True, ctrlrange=(0, 1), dyntype='filter',
                            dynprm=[motor_tau, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     if pendulum:
@@ -84,8 +84,8 @@ def make_arena(drone_params=[None], reference=None):
                            texrepeat=[5, 5], reflectance=.2)
     arena.asset.add('texture', name='skybox', type='skybox', builtin='gradient',
                     rgb1=(.4, .6, .8), rgb2=(0, 0, 0), width=800, height=800, mark="random", markrgb=(1, 1, 1))
-    arena.worldbody.add('geom', name='floor', type='plane', size=[10, 10, 0.5], material=grid)
-    arena.worldbody.add('light', name='light', pos=[0, 0, 6], cutoff=100, dir=[0, 0, -1.3])
+    arena.worldbody.add('geom', name='floor', type='plane', size=[20, 20, 0.1], material=grid)
+    arena.worldbody.add('light', directional='true', name='light', pos=[0, 0, 10], dir=[0, 0, -1.3])
 
     #  visualize origin
     # arrow_sz = [0.005, 0.5]
@@ -109,6 +109,7 @@ def make_arena(drone_params=[None], reference=None):
         arrow_dist = sphere_sz + arrow_sz[1]/2
         x_pos = arrow_dist * np.array([ np.cos(ref_yaw), np.sin(ref_yaw), 0])
         y_pos = arrow_dist * np.array([-np.sin(ref_yaw), np.cos(ref_yaw), 0])
+        # TODO: fix initial rotation when yaw!=0
         ref_body = arena.worldbody.add('body', name='reference', pos=reference[:3], mocap='true')
         ref_body.add('geom', type='sphere', size=[sphere_sz], rgba=(1, 1, 1, 1), contype=1, conaffinity=0)
         ref_body.add('geom', pos=x_pos, euler=[np.pi/2, -ref_yaw - np.pi/2, 0], size=arrow_sz,
