@@ -1,12 +1,12 @@
-from gym.envs.mujoco.mujoco_rendering import Viewer
+from gymnasium.envs.mujoco.mujoco_rendering import Viewer
 import glfw
 from .mujoco_vecenv import MujocoEnv
 import mujoco
 import numpy as np
 from typing import Union, Optional
-from gym.spaces import Space
+from gymnasium.spaces import Space
 from os import path
-import gym
+import gymnasium
 from threading import Lock
 
 DEFAULT_HEIGHT = 480
@@ -131,10 +131,10 @@ class extendedEnv(MujocoEnv):
 
     def render(self, mode=None):
         if self.render_mode is None:
-            gym.logger.warn(
+            gymnasium.logger.warn(
                 "You are calling render method without specifying any render mode. "
                 "You can specify the render_mode at initialization, "
-                f'e.g. gym("{self.spec.id}", render_mode="rgb_array")'
+                f'e.g. gymnasium("{self.spec.id}", render_mode="rgb_array")'
             )
             return
 
@@ -204,15 +204,15 @@ class extendedEnv(MujocoEnv):
     def _get_viewer(
         self, mode
     ) -> Union[
-        "gym.envs.mujoco.mujoco_rendering.Viewer",
-        "gym.envs.mujoco.mujoco_rendering.RenderContextOffscreen",
+        "gymnasium.envs.mujoco.mujoco_rendering.Viewer",
+        "gymnasium.envs.mujoco.mujoco_rendering.RenderContextOffscreen",
     ]:
         self.viewer = self._viewers.get(mode)
         if self.viewer is None:
             if mode == "human":
                 self.viewer = extended_Viewer(self.model, self.data, self.window_title)
             elif mode in {"rgb_array", "depth_array"}:
-                from gym.envs.mujoco.mujoco_rendering import RenderContextOffscreen
+                from gymnasium.envs.mujoco.mujoco_rendering import RenderContextOffscreen
 
                 self.viewer = RenderContextOffscreen(self.model, self.data)
             else:
