@@ -1,5 +1,5 @@
 from ray.rllib.algorithms.ppo import PPOConfig
-from environments.VecDrone import VecDrone, base_config
+from environments.BaseDroneEnv import BaseDroneEnv, base_config
 from training import load_model_config
 import os
 import numpy as np
@@ -22,7 +22,7 @@ def rollout_trajectory(env, algo):
             action, state, _ = algo.compute_single_action(obs[0], state)
         else:
             action = algo.compute_single_action(obs[0])
-        obs, reward, done, info = env.vector_step([action])
+        obs, reward, done, truncated, info = env.vector_step([action])
         env.render()
         total_reward += reward[0]
     print(f"Rollout total-reward={total_reward}")
@@ -41,6 +41,7 @@ def evaluate_trajectory(env, algo, trajectory=[[0, 0, 3, 0]]*400):
     observations = [obs[0]]
     prev_action = [[0,0,0,0]]
     rewards = []
+    actions = []
     for x in trajectory:
         env.move_reference_to(x)
         if lstm:  # pass the state as well
@@ -48,12 +49,13 @@ def evaluate_trajectory(env, algo, trajectory=[[0, 0, 3, 0]]*400):
         else:
             action = algo.compute_single_action(obs[0], prev_action=prev_action)
         prev_action = [action]
-        obs, reward, done, info = env.vector_step([action])
+        obs, reward, done, truncated, info = env.vector_step([action])
         observations.append(obs[0])
         rewards.append(reward[0])
+        actions.append(action)
         env.render()
         total_reward += reward[0]
-    return observations, rewards
+    return observations, actions, rewards
 
 
 def gen_circle_trajectory(T=10, f=0.5, r=1, h=3):
@@ -90,6 +92,10 @@ eval_env_config['window_title'] = 'evaluation'
 ModelCatalog.register_custom_model("RMA_model", RMA_model)
 model_config = {
     "custom_model": "RMA_model",
+    "custom_model_config": {'num_states': 12,
+                            'num_params': 7,
+                            'num_actions': 4,
+                            'param_embed_dim': 12},
 }
 
 if __name__ == '__main__':
@@ -98,10 +104,11 @@ if __name__ == '__main__':
         .resources(num_gpus=1)\
         .framework(framework='torch') \
         .rollouts(num_rollout_workers=0) \
-        .environment(env=VecDrone, env_config=eval_env_config)
+        .environment(env=BaseDroneEnv, env_config=eval_env_config)\
+        .exploration(explore=False)
 
     # create an environment for evaluation
-    eval_env = VecDrone(eval_env_config)
+    eval_env = BaseDroneEnv(eval_env_config)
     algo = algo_config.build()
     if load_checkpoint and os.path.exists(model_dir + checkpoint_to_load):
         algo.restore(model_dir + checkpoint_to_load)
@@ -109,11 +116,15 @@ if __name__ == '__main__':
     # rollout a trajectory using the learned model
 
     t, trajectory = gen_ramp_trajectory()
-    observations, rewards = evaluate_trajectory(eval_env, algo, trajectory)
+    observations, actions, rewards = evaluate_trajectory(eval_env, algo, trajectory)
     plt.figure()
     plt.plot(t, np.array(observations)[1:, :3], label=['x err', 'y err', 'z err'])
     plt.plot(t, trajectory[:, :3], label=['x ref', 'y ref', 'z ref'])
     plt.show()
     plt.xlabel('time [s]')
     plt.legend()
+
+    plt.figure()
+    plt.plot(t, np.array(actions))
+    plt.show()
 
