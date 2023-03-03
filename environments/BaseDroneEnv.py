@@ -51,25 +51,25 @@ def default_termination_fcn(env, state, action, num_steps):
 
 
 base_config = {'reference': [0, 0, 15, 0],  # x,y,z,yaw
-               'start_pos': [0, 0, 15, 0],  # x,y,z,yaw
+               'start_pos': [0, 0, 13, 0],  # x,y,z,yaw
                'max_distance': 7,  # if drone is further from reference than this number, terminate episode
-               'random_start_pos': True,  # toggle initial pose position
+               'random_start_pos': False,  # toggle initial pose position
                'random_params': False,  # toggle randomizing drone parameters
                'pendulum': False,  # whether to include a pendulum on a drone
                'max_random_offset': 3,  # maximum position offset used for random sampling of starting position
-               'rp_variance': [0.7, 0.7],  # variance used for random roll and pitch angle sampling
-               'vel_variance': [4, 4, 4],  # variance used for random velocity sampling
-               'ang_vel_variance': [1, 1, 1],  # variance used for random velocity sampling
+               'rp_variance': [0.6, 0.6],  # variance used for random roll and pitch angle sampling
+               'vel_variance': [0.6, 0.6, 0.6],  # variance used for random velocity sampling
+               'ang_vel_variance': [0.6, 0.6, 0.6],  # variance used for random velocity sampling
                'body_mass_interval': [0.5, 0.8],  # drone main body mass in kilograms
                'arm_len_interval': [0.15, 0.18],  # drone arm length in meters
                'motor_force_interval': [6, 9],  # what force the motor produces in Newtons, torque is also affected
-               'motor_tau_interval': [0.005, 0.01],  # time constant of the motor in seconds, 1/tau is crossover f of the LP filter
+               'motor_tau_interval': [0.001, 0.005],  # time constant of the motor in seconds, 1/tau is crossover f of the LP filter
                'pendulum_rp_variance': [0.5, 0.5],  # variance used for random velocity sampling
                'pendulum_length_interval': [0.2, 0.4],  # pendulum length in meters
                'weight_mass_interval': [0.2, 0.6],  # weight of the pendulum mass in kilograms
                'reward_fcn': default_reward_fcn,
                'terminated_fcn': default_termination_fcn,
-               'max_steps': 512,  # maximum length of a single episode
+               'max_steps': 256,  # maximum length of a single episode
                'regen_env_at_steps': None,  # after this many (total) steps, regenerate drone model parameters
                'train_vis': 0,  # number of training environments to visualize
                'window_title': 'mujoco',
@@ -153,7 +153,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         extendedEnv.__init__(
             self,
             model,
-            4,
+            frame_skip=20,
             render_mode=self.render_mode,
             observation_space=self.observation_space,
             width=self.width,
@@ -223,7 +223,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             weight_masses = 0.5*(h_wm + l_wm)*np.ones(self.num_drones)
         # save parameters into a list of dictionaries
         for i in range(self.num_drones):
-            params = {'body_mass': body_masses[i],
+            params = {'mass': body_masses[i],
                       'arm_len': arm_lens[i],
                       'motor_force': motor_forces[i],
                       'motor_tau': motor_taus[i],

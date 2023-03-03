@@ -24,8 +24,8 @@ def make_drone(id=0, hue=1, params=None):
     model.default.joint.damping = 0.1
     model.default.joint.armature = 0.0
 
-    body_mass = params.get('body_mass', 0.9)
-    motor_tau = params.get('motor_tau', 0.15)  # motor acts as a low pass filter with crossover frequency 1/motor_tau
+    mass = params.get('mass', 0.9)
+    motor_tau = params.get('motor_tau', 0.015)  # motor acts as a low pass filter with crossover frequency 1/motor_tau
     motor_force = params.get('motor_force', 7)
     arm_len = params.get('arm_len', 0.15)
     pendulum = params.get('pendulum', False)
@@ -34,6 +34,11 @@ def make_drone(id=0, hue=1, params=None):
     pole_mass = 0.2*pendulum_length
 
     half_body_size = 0.05
+
+    # hopefully, this is a reasonable mass distribution
+    body_mass = 0.56*mass
+    arm_mass = 0.07*mass
+    motor_mass = 0.04*mass
 
     core = model.worldbody.add('body', name='core_body_%d' % id, pos=(0, 0, 0))
     core.add('geom', name='core_geom_%d' % id, size=(half_body_size, half_body_size, half_body_size/3), mass=body_mass, rgba=rgba)
@@ -48,10 +53,10 @@ def make_drone(id=0, hue=1, params=None):
         arm_pos = (np.sqrt(2)*half_body_size + 0.5*arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
         rot_pos = (np.sqrt(2)*half_body_size + arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
         prop_radius = arm_len/1.5
-        core.add('geom', name='arm_%d' % i, size=(arm_len/2, arm_len/20, arm_len/20), pos=arm_pos, euler=[0, 0, theta], mass=0.25*arm_len, rgba=[0.3, 0.3, 0.3, 1])
+        core.add('geom', name='arm_%d' % i, size=(arm_len/2, arm_len/20, arm_len/20), pos=arm_pos, euler=[0, 0, theta], mass=arm_mass, rgba=[0.3, 0.3, 0.3, 1])
         core.add('site', name='motorsite_%d' % i, type='cylinder', pos=rot_pos, size=(0.015, arm_len/20), rgba=[0.3, 0.3, 0.3, 3])
-        core.add('geom', name='motor_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.015]), size=(0.01, 0.01), rgba=[0.1, 0.1, 0.1, 1], mass=0.05)
-        core.add('geom', name='prop_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.025]), size=(prop_radius, 0.0025), mass=2.5*prop_radius**2, rgba=rgba_transparent)
+        core.add('geom', name='motor_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.015]), size=(0.01, 0.01), rgba=[0.1, 0.1, 0.1, 1], mass=motor_mass)
+        core.add('geom', name='prop_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.025]), size=(prop_radius, 0.0025), mass=0, rgba=rgba_transparent)
         model.actuator.add('general', name='motor_%d' % i, site='motorsite_%d' % i, gear=(0, 0, motor_force, 0, 0, motor_force/1000*(-1)**i),
                            ctrllimited=True, ctrlrange=(0, 1), dyntype='filter',
                            dynprm=[motor_tau, 0, 0, 0, 0, 0, 0, 0, 0, 0])
@@ -69,7 +74,7 @@ def make_arena(drone_params=[None], reference=None):
     arena.size.nconmax = 1000  # set maximum number of collisions
     arena.size.njmax = 2000  # increase the maximum number of constraints
 
-    arena.option.timestep = 0.005
+    arena.option.timestep = 0.001  # 1 ms timestep for physics
     arena.option.density = 1.2  # enable density and viscosity of air to compute drag forces
     arena.option.viscosity = 0.00002
     arena.option.wind = (0, 0, 0)  # wind direction and speed
@@ -107,14 +112,11 @@ def make_arena(drone_params=[None], reference=None):
         sphere_sz = 0.05
         ref_yaw = reference[3]
         arrow_dist = sphere_sz + arrow_sz[1]/2
-        x_pos = arrow_dist * np.array([ np.cos(ref_yaw), np.sin(ref_yaw), 0])
-        y_pos = arrow_dist * np.array([-np.sin(ref_yaw), np.cos(ref_yaw), 0])
-        # TODO: fix initial rotation when yaw!=0
-        ref_body = arena.worldbody.add('body', name='reference', pos=reference[:3], mocap='true')
+        ref_body = arena.worldbody.add('body', name='reference', pos=reference[:3], euler=[0, 0, ref_yaw], mocap='true')
         ref_body.add('geom', type='sphere', size=[sphere_sz], rgba=(1, 1, 1, 1), contype=1, conaffinity=0)
-        ref_body.add('geom', pos=x_pos, euler=[np.pi/2, -ref_yaw - np.pi/2, 0], size=arrow_sz,
+        ref_body.add('geom', pos=[arrow_dist, 0, 0], euler=[np.pi/2, - np.pi/2, 0], size=arrow_sz,
                             type='cylinder', rgba=(1, 0, 0, 1), contype=1, conaffinity=0)
-        ref_body.add('geom', pos=y_pos, euler=[np.pi/2, -ref_yaw, 0], size=arrow_sz,
+        ref_body.add('geom', pos=[0, arrow_dist, 0], euler=[np.pi/2, 0, 0], size=arrow_sz,
                      type='cylinder', rgba=(0, 1, 0, 1), contype=1, conaffinity=0)
         ref_body.add('geom', pos=[0, 0, arrow_dist], size=arrow_sz,
                      type='cylinder', rgba=(0, 0, 1, 1), contype=1, conaffinity=0)
