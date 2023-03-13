@@ -29,7 +29,7 @@ def make_drone(id=0, hue=1, params=None):
     motor_force = params.get('motor_force', 7)
     arm_len = params.get('arm_len', 0.15)
     pendulum = params.get('pendulum', False)
-    pendulum_length = params.get('pendulum_len', 0.1)
+    pendulum_length = params.get('pendulum_len', 0.2)
     weight_mass = params.get('weight_mass', 0.2)
     pole_mass = 0.2*pendulum_length
 
@@ -64,17 +64,17 @@ def make_drone(id=0, hue=1, params=None):
         pend = core.add('body', name='pendulum', pos=(0, 0, -half_body_size/3))
         pend.add('joint', type='ball', pos=(0, 0, 0))
         pend.add('geom', size=(0.005, pendulum_length), pos=(0, 0, -pendulum_length), type='cylinder', mass=pole_mass, rgba=[0.3, 0.3, 0.3, 1])
-        pend.add('geom', pos=(0, 0, -2*pendulum_length), type='sphere', size=[0.1*np.cbrt(weight_mass)], mass=weight_mass)
+        pend.add('geom', pos=(0, 0, -2*pendulum_length), type='box', size=[0.1*np.cbrt(weight_mass), 0.1*np.cbrt(weight_mass), 0.1*np.cbrt(weight_mass)], mass=weight_mass)
     return model
 
 
-def make_arena(drone_params=[None], reference=None):
+def make_arena(drone_params=[None], reference=None, frequency=1000):
     arena = mjcf.RootElement(model='arena')
 
     arena.size.nconmax = 1000  # set maximum number of collisions
     arena.size.njmax = 2000  # increase the maximum number of constraints
 
-    arena.option.timestep = 0.001  # 1 ms timestep for physics
+    arena.option.timestep = 1/frequency  # timestep for physics
     arena.option.density = 1.2  # enable density and viscosity of air to compute drag forces
     arena.option.viscosity = 0.00002
     arena.option.wind = (0, 0, 0)  # wind direction and speed
