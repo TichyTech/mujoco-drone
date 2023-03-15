@@ -21,12 +21,12 @@ def make_drone(id=0, hue=1, params=None):
     model.default.geom.friction = (1, 0.5, 0.5)
     model.default.geom.margin = 0
 
-    model.default.joint.damping = 0.1
+    model.default.joint.damping = 0.05
     model.default.joint.armature = 0.0
 
-    mass = params.get('mass', 0.9)
+    mass = params.get('mass', 1.35)
     motor_tau = params.get('motor_tau', 0.015)  # motor acts as a low pass filter with crossover frequency 1/motor_tau
-    motor_force = params.get('motor_force', 7)
+    motor_force = params.get('motor_force', 7.5)
     arm_len = params.get('arm_len', 0.15)
     pendulum = params.get('pendulum', False)
     pendulum_length = params.get('pendulum_len', 0.2)
@@ -63,12 +63,12 @@ def make_drone(id=0, hue=1, params=None):
     if pendulum:
         pend = core.add('body', name='pendulum', pos=(0, 0, -half_body_size/3))
         pend.add('joint', type='ball', pos=(0, 0, 0))
-        pend.add('geom', size=(0.005, pendulum_length), pos=(0, 0, -pendulum_length), type='cylinder', mass=pole_mass, rgba=[0.3, 0.3, 0.3, 1])
-        pend.add('geom', pos=(0, 0, -2*pendulum_length), type='box', size=[0.1*np.cbrt(weight_mass), 0.1*np.cbrt(weight_mass), 0.1*np.cbrt(weight_mass)], mass=weight_mass)
+        pend.add('geom', size=(0.005, pendulum_length/2), pos=(0, 0, -pendulum_length/2), type='cylinder', mass=pole_mass, rgba=[0.3, 0.3, 0.3, 1])
+        pend.add('geom', pos=(0, 0, -pendulum_length), type='box', size=[0.1*np.cbrt(weight_mass), 0.1*np.cbrt(weight_mass), 0.1*np.cbrt(weight_mass)], mass=weight_mass)
     return model
 
 
-def make_arena(drone_params=[None], reference=None, frequency=1000):
+def make_arena(drone_params=[None], frequency=1000, mocaps=1):
     arena = mjcf.RootElement(model='arena')
 
     arena.size.nconmax = 1000  # set maximum number of collisions
@@ -92,34 +92,19 @@ def make_arena(drone_params=[None], reference=None, frequency=1000):
     arena.worldbody.add('geom', name='floor', type='plane', size=[20, 20, 0.1], material=grid)
     arena.worldbody.add('light', directional='true', name='light', pos=[0, 0, 10], dir=[0, 0, -1.3])
 
-    #  visualize origin
-    # arrow_sz = [0.005, 0.5]
-    # sphere_sz = 0.1
-    # arrow_dist = sphere_sz + arrow_sz[1] / 2
-    # x_pos = arrow_dist * np.array([1, 0, 0])
-    # y_pos = arrow_dist * np.array([0, 1, 0])
-    # origin_body = arena.worldbody.add('body', name='origin', pos=[0, 0, 0], mocap='true')
-    # origin_body.add('geom', type='sphere', size=[sphere_sz], rgba=(1, 1, 1, 1), contype=1, conaffinity=0)
-    # origin_body.add('geom', pos=x_pos, euler=[np.pi / 2, 0 - np.pi / 2, 0], size=arrow_sz,
-    #              type='cylinder', rgba=(1, 0, 0, 1), contype=1, conaffinity=0)
-    # origin_body.add('geom', pos=y_pos, euler=[np.pi / 2, 0, 0], size=arrow_sz,
-    #              type='cylinder', rgba=(0, 1, 0, 1), contype=1, conaffinity=0)
-    # origin_body.add('geom', pos=[0, 0, arrow_dist], size=arrow_sz,
-    #              type='cylinder', rgba=(0, 0, 1, 1), contype=1, conaffinity=0)
-
-    if reference is not None:  # draw reference
-        arrow_sz = [0.005, 0.15]
-        sphere_sz = 0.05
-        ref_yaw = reference[3]
-        arrow_dist = sphere_sz + arrow_sz[1]/2
-        ref_body = arena.worldbody.add('body', name='reference', pos=reference[:3], euler=[0, 0, ref_yaw], mocap='true')
-        ref_body.add('geom', type='sphere', size=[sphere_sz], rgba=(1, 1, 1, 1), contype=1, conaffinity=0)
-        ref_body.add('geom', pos=[arrow_dist, 0, 0], euler=[np.pi/2, - np.pi/2, 0], size=arrow_sz,
-                            type='cylinder', rgba=(1, 0, 0, 1), contype=1, conaffinity=0)
-        ref_body.add('geom', pos=[0, arrow_dist, 0], euler=[np.pi/2, 0, 0], size=arrow_sz,
-                     type='cylinder', rgba=(0, 1, 0, 1), contype=1, conaffinity=0)
-        ref_body.add('geom', pos=[0, 0, arrow_dist], size=arrow_sz,
-                     type='cylinder', rgba=(0, 0, 1, 1), contype=1, conaffinity=0)
+    if mocaps > 0:
+        for i in range(mocaps):
+            arrow_sz = [0.005, 0.15]
+            sphere_sz = 0.05
+            arrow_dist = sphere_sz + arrow_sz[1] / 2
+            ref_body = arena.worldbody.add('body', name='mocap%d' % i, pos=[0, 0, 0], euler=[0, 0, 0], mocap='true')
+            ref_body.add('geom', type='sphere', size=[sphere_sz], rgba=(1, 1, 1, 1), contype=1, conaffinity=0)
+            ref_body.add('geom', pos=[arrow_dist, 0, 0], euler=[np.pi / 2, - np.pi / 2, 0], size=arrow_sz,
+                         type='cylinder', rgba=(1, 0, 0, 1), contype=1, conaffinity=0)
+            ref_body.add('geom', pos=[0, arrow_dist, 0], euler=[np.pi / 2, 0, 0], size=arrow_sz,
+                         type='cylinder', rgba=(0, 1, 0, 1), contype=1, conaffinity=0)
+            ref_body.add('geom', pos=[0, 0, arrow_dist], size=arrow_sz,
+                         type='cylinder', rgba=(0, 0, 1, 1), contype=1, conaffinity=0)
 
     num_drones = len(drone_params)
     drones = [make_drone(i, i/num_drones, drone_params[i]) for i in range(num_drones)]

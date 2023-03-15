@@ -34,15 +34,16 @@ base_config = {'frequency': 200,  # physics simulator frequency
                'motor_force_interval': [6, 9],  # what force the motor produces in Newtons, torque is also affected
                'motor_tau_interval': [0.001, 0.005],  # time constant of the motor in seconds, 1/tau is crossover f of the LP filter
                'pendulum_rp_variance': [0.5, 0.5],  # variance used for random velocity sampling
-               'pendulum_length_interval': [0.2, 0.4],  # pendulum length in meters
-               'weight_mass_interval': [0.2, 0.6],  # weight of the pendulum mass in kilograms
+               'pendulum_length_interval': [0.8, 1.5],  # pendulum length in meters
+               'weight_mass_interval': [0.1, 0.3],  # weight of the pendulum mass in kilograms
                'reward_fcn': default_reward_fcn,
                'terminated_fcn': default_termination_fcn,
                'max_steps': 512,  # maximum length of a single episode
                'regen_env_at_steps': None,  # after this many (total) steps, regenerate drone model parameters
                'train_vis': 0,  # number of training environments to visualize
                'window_title': 'mujoco',
-               'controlled': False  # whether this instance of env has externally controller reference (for evaluation)
+               'controlled': False,  # whether this instance of env has externally controller reference (for evaluation)
+               'mocaps': 1  # number of externally controlled objects inside the simulation
 }
 
 
@@ -70,6 +71,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
                 print('Disabling reference control')
 
         # get generate environment parameters
+        self.mocaps = config.get('mocaps', 1)
         self.skip_steps = config.get('skip_steps', 1)
         self.frequency = config.get('frequency', 200)
         self.reference = config.get('reference', [0, 0, 0, 0])
@@ -115,7 +117,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             self.num_states = 19
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(self.num_states + self.num_params,), dtype=np.float64)
         self.action_space = Box(low=0, high=1, shape=(4,), dtype=np.float64)
-        model = mjcf_to_mjmodel(make_arena(self.drone_params, self.reference, self.frequency))  # create a mujoco model
+        model = mjcf_to_mjmodel(make_arena(self.drone_params, self.frequency, self.mocaps))  # create a mujoco model
 
         self.metadata = {
             "render_modes": [
@@ -155,21 +157,19 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         sg = np.sign(pert)
         pert = 0.1 * mag * sg * [xy_active, xy_active, zyaw_active, zyaw_active]
 
-        self.move_reference_by(pert)
-
-    def move_reference_by(self, offset):
-        """same as move_reference_to(), but using relative offset instead of absolute coordinates"""
-        self.move_reference_to(self.reference + offset)
-
-    def move_reference_to(self, target):
-        """update reference vector as well as in-simulation reference visualization"""
-        self.reference = target
-        self.reference[3] = (self.reference[3] + np.pi) % (2*np.pi) - np.pi
-        # clip reference to some box around start position
+        # apply clipping
+        self.reference = self.reference + pert
+        self.reference[3] = (self.reference[3] + np.pi) % (2 * np.pi) - np.pi
         center = np.array(self.start_pos[:3])
         self.reference[:3] = np.clip(self.reference[:3], a_min=center + [-5, -5, -6], a_max=center + [5, 5, 6])  # update reference
-        self.data.mocap_pos[:3] = self.reference[:3]  # update reference visualization
-        self.data.mocap_quat[:] = mujoco_rpy2quat([0, 0, self.reference[3]])
+        quat = mujoco_rpy2quat([0, 0, self.reference[3]])  # get quaternion
+        self.move_mocap_to(np.concatenate((self.reference[:3], quat)), 0)
+
+    def move_mocap_to(self, pose, idx=0):
+        """update mocap using pose consisting of xyz coordinates and quaternion rotation"""
+        assert idx < len(self.data.mocap_pos) and idx < self.mocaps
+        self.data.mocap_pos[idx] = pose[:3]  # update mocap coodrinates
+        self.data.mocap_quat[idx] = pose[3:]
 
     def generate_drone_params(self):
         """sample drone model parameters using specified parameters if enabled"""
@@ -255,8 +255,12 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
     def vector_step(self, actions):
         """Performs a simulation step on all drone given the specified actions. Each action in the actions list consists
         of a 4-item array, where each entry corresponds to the given motor throttle in the interval [0, 1]."""
-        if self.controlled:
-            self.control_reference()  # move reference accordingly
+
+        if self.controlled:  # update reference visualization using controller if enabled
+            self.control_reference()
+        else:  # otherwise, just set the reference vis to default reference
+            pose = np.concatenate((self.reference[:3], mujoco_rpy2quat([0, 0, self.reference[3]])))
+            self.move_mocap_to(pose, 0)
 
         ctrl = 0.1 + 0.9*np.array(actions).ravel()  # reformat actions for mujoco and constrain to [0.1, 1]
         self.do_simulation(ctrl, self.frame_skip)
@@ -267,12 +271,12 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         obs, rewards, dones, truncated, infos = [], [], [], [], []
         for i in range(self.num_drones):
             state_i = states[i]  # load state
-            terminated = self.terminated_fcn(self, state_i, actions[i], self.num_steps[i])  # decide episode termination
+            truncate = self.terminated_fcn(self, state_i, actions[i], self.num_steps[i])  # decide episode termination
             reward = self.reward_fcn(self, state_i, actions[i], self.num_steps[i])  # compute reward
             # add all values to the output lists
             rewards.append(reward)
-            dones.append(terminated)
-            truncated.append(False)
+            dones.append(False)
+            truncated.append(truncate)
             infos.append({})
 
         if self.render_mode == 'human':  # if rendering is enabled, render after each simulation step
