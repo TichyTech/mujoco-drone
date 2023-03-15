@@ -2,6 +2,12 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 
 
+def mujoco_DCM2quat(DCM):
+    """convert from a rotation matrix to mujoco quat representation"""
+    quat = R.from_matrix(DCM).as_quat()
+    return np.append(quat[3], quat[:3])
+
+
 def mujoco_quat2DCM(quat):
     """convert from mujoco quaternion to rotation matrix"""
     return R.from_quat(np.append(quat[1:], quat[0])).as_matrix()
