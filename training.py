@@ -14,7 +14,7 @@ def save_model_config(model_dir, model_config):
         json.dump(model_config, f, indent=4)
 
 
-def train(algo, num_epochs, model_dir='models', checkpoint_ep=10):
+def train(algo, num_epochs, checkpoint_dir='training/checkpoints', checkpoint_ep=10):
     start = time()
     for ep in range(num_epochs):
         results = algo.train()
@@ -24,4 +24,4 @@ def train(algo, num_epochs, model_dir='models', checkpoint_ep=10):
               results['episode_reward_mean'], results['episode_len_mean'], mean_action_reward))
         algo.evaluate()
         if (ep + 1) % checkpoint_ep == 0:
-            print("Saving checkpoint to {}".format(algo.save(model_dir + 'checkpoints')))  # save checkpoint
+            print("Saving checkpoint to {}".format(algo.save(checkpoint_dir)))  # save checkpoint
