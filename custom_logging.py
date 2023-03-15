@@ -1,6 +1,7 @@
 import torch
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 import numpy as np
+from ray.tune.logger import UnifiedLogger
 
 
 class MyCallbacks(DefaultCallbacks):
@@ -41,3 +42,9 @@ class MyCallbacks(DefaultCallbacks):
         for i, w in enumerate(policy.model.parameters()):
             result['weights_norm_l%d' % i] = torch.norm(w).item()
             result['grad_norm_l%d' % i] = torch.norm(w.grad).item()
+
+
+def custom_logger_creator(logdir):
+    def logger(config):
+        return UnifiedLogger(config, logdir, loggers=None)
+    return logger
