@@ -5,11 +5,18 @@ from .transformation import mujoco_rpy2quat, mujoco_quat2DCM
 def default_reward_fcn(env, state, action, num_steps):
     # penalize distance from reference
     ref = env.reference
+    pos_err = np.linalg.norm(state[:3] - ref[:3])
+    reward = - pos_err
+    return reward
+
+
+def distance_reward_fcn(env, state, action, num_steps):
+    # penalize distance from reference
+    ref = env.reference
     heading_err = np.linalg.norm(state[5] - ref[3])
     heading_err = abs((heading_err + np.pi) % (2 * np.pi) - np.pi)
     pos_err = np.linalg.norm(state[:3] - ref[:3])
-    too_far = pos_err > env.max_distance
-    reward = 3 - pos_err - 200*too_far - heading_err
+    reward = - pos_err - heading_err
     return reward
 
 
@@ -20,8 +27,7 @@ def distance_energy_reward(env, state, action, num_steps):
     heading_err = abs((heading_err + np.pi) % (2 * np.pi) - np.pi)
     pos_err = ((state[:3] - ref[:3]) ** 2).sum()
     ctrl_effort = (np.array(action) ** 2).sum()
-    too_far = (pos_err > env.max_distance ** 2)
-    reward = - pos_err - 500*too_far - heading_err - 0.02*ctrl_effort
+    reward = - pos_err - 0.5*heading_err - 0.2*ctrl_effort
     return reward
 
 
