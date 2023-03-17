@@ -16,7 +16,8 @@ def default_termination_fcn(env, state, action, num_steps):
     return terminated
 
 
-base_config = {'frequency': 200,  # physics simulator frequency
+base_config = {'seed': 42,
+               'frequency': 200,  # physics simulator frequency
                'skip_steps': 2,  # policy takes action every skip_steps steps
                'reference': [0, 0, 15, 0],  # x,y,z,yaw
                'start_pos': [0, 0, 15, 0],  # x,y,z,yaw
@@ -24,7 +25,7 @@ base_config = {'frequency': 200,  # physics simulator frequency
                'random_start_pos': True,  # toggle initial pose position
                'random_params': False,  # toggle randomizing drone parameters
                'pendulum': True,  # whether to include a pendulum on a drone
-               'difficulty': 0.1,
+               'difficulty': 0.5,
                'max_random_offset': 2,  # maximum position offset used for random sampling of starting position
                'rp_variance': [0.8, 0.8],  # variance used for random roll and pitch angle sampling
                'vel_variance': [1, 1, 1],  # variance used for random velocity sampling
@@ -105,7 +106,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)
 
         # set random number generator seed for reproducibility
-        rng, seed = utils.seeding.np_random(seed=config.get('worker_index', -1) + 1)
+        rng, seed = utils.seeding.np_random(seed=config.get('worker_index', -1) + 1 + config.get('seed', 1))
         self.np_random = rng
 
         # generate randomized parameters for each drone and save them into a list
@@ -116,7 +117,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         else:
             self.num_states = 19
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(self.num_states + self.num_params,), dtype=np.float64)
-        self.action_space = Box(low=0, high=1, shape=(4,), dtype=np.float64)
+        self.action_space = Box(low=0, high=1, shape=(4,), dtype=np.float64, seed=self.np_random)
         model = mjcf_to_mjmodel(make_arena(self.drone_params, self.frequency, self.mocaps))  # create a mujoco model
 
         self.metadata = {
