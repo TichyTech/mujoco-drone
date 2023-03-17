@@ -4,6 +4,36 @@ import numpy as np
 from .transformation import mujoco_quat2DCM, mujoco_rpy2quat
 
 
+class GlobalFrameRPYEnv(BaseDroneEnv):
+
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.num_states = 18
+        self.num_params = 0
+        num_obs = self.num_states + self.num_params
+        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(num_obs,), dtype=np.float64)
+
+    def _get_obs(self):
+        drone_states = super()._get_obs()
+        out_obs = []
+        for state in drone_states:
+            xyz = state[:3]
+            rpy = state[3:6]
+            yaw = rpy[2]
+            vel = state[6:9]
+            ang_vel = state[9:12]
+            pendulum_rpy = state[12:15]
+            pendulum_ang_vel = state[15:18]
+            # acc = state[18:21]
+            # ref = state[21:25]
+            # params = state[25:]
+            heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
+            glob_ref_err = np.array(self.reference[:3] - xyz)
+            obs_i = np.concatenate([glob_ref_err, rpy[:2][::-1], heading_diff, vel, ang_vel, pendulum_rpy, pendulum_ang_vel])
+            out_obs.append(obs_i)
+        return out_obs
+
+
 class LocalFrameRPYEnv(BaseDroneEnv):
     """Replaces global state observation with local drone frame relative states.
     This includes reference, velocity and angular velocity in local drone frame as well as roll and pitch angles and
