@@ -8,15 +8,17 @@ import tempfile
 from models.PPO.MLP.CustomMLP import CustomMLP
 from models.PPO.SimpleMLP.SimpleMLP import SimpleMLPmodel2
 from models.PPO.CustomLSTM.CustomLSTM import CustomLSTM
-from environments.rewards import reward_1, default_reward_fcn, reward_pendulum_dist
+from environments.rewards import reward_1, default_reward_fcn, distance_energy_reward, distance_reward_fcn
 from ray.rllib.models import ModelCatalog
 from custom_logging import MyCallbacks, custom_logger_creator
-from environments.ObservationWrappers import LocalFrameRPYEnv
+from environments.ObservationWrappers import LocalFrameRPYEnv, GlobalFrameRPYEnv
 from distributions import MyBetaDist, MySquashedGaussian
 from ray import tune
 from ray.tune.schedulers import PopulationBasedTraining
 from ray.tune.result import DEFAULT_RESULTS_DIR
 
+
+seed = 42
 
 # model configuration
 environment = LocalFrameRPYEnv  # observation transform
@@ -25,8 +27,8 @@ experiment_logdir = 'MLP'  # name of the directory in ~/ray_results to log to
 
 # load checkpoint?
 checkpoint_dir = 'models/PPO/MLP/checkpoints'  # directory where to look for checkpoints
-checkpoint_to_load = 'checkpoint_000020'  # saved checkpoint name
-load_checkpoint = 1
+checkpoint_to_load = 'checkpoint_000030'  # saved checkpoint name
+load_checkpoint = 0
 
 # setting the parameters
 ModelCatalog.register_custom_model("CustomModel", model)
@@ -49,12 +51,13 @@ rollout_length = 512  # length of individual rollouts used in training
 train_batch_size = num_processes * train_drones * rollout_length  # total length of the training data batch
 
 train_env_config = copy(base_config)
-train_env_config['reward_fcn'] = reward_1
+train_env_config['reward_fcn'] = distance_energy_reward
 train_env_config['num_drones'] = train_drones  # set number of drones used per environment for training in parallel
 train_env_config['window_title'] = 'training'
 train_env_config['regen_env_at_steps'] = 2048  # regenerate simulation after 2000 timesteps
-train_env_config['max_steps'] = 1024
+train_env_config['max_steps'] = 2048
 train_env_config['train_vis'] = 1   # how many training windows to render and show
+train_env_config['seed'] = seed
 
 # evaluation environment configuration
 eval_env_config = copy(base_config)
@@ -62,7 +65,7 @@ eval_env_config['window_title'] = 'evaluation'
 eval_env_config['num_drones'] = 1
 eval_env_config['controlled'] = True
 eval_env_config['max_distance'] = 3
-eval_env_config['reward_fcn'] = reward_1
+eval_env_config['reward_fcn'] = distance_energy_reward
 
 # define custom logging dir
 timestr = datetime.today().strftime("%d-%m_%H-%M")  # current time
@@ -79,7 +82,7 @@ algo_config = PPOConfig() \
     .framework(framework='torch') \
     .environment(env=environment, env_config=train_env_config, normalize_actions=False)\
     .exploration(explore=True, exploration_config={"type": "StochasticSampling", "random_timesteps": 10000})\
-    .debugging(seed=42, logger_creator=custom_logger_creator(logdir))\
+    .debugging(seed=seed, logger_creator=custom_logger_creator(logdir))\
     .callbacks(callbacks_class=MyCallbacks)\
     .evaluation(evaluation_duration='auto', evaluation_interval=1, evaluation_parallel_to_training=True,
                 evaluation_config={'env_config': eval_env_config, 'explore': False}, evaluation_num_workers=1) \
