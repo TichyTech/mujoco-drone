@@ -123,7 +123,7 @@ class LocalFrameRPYParamsEnv(BaseDroneEnv):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.num_states = 18
-        self.num_params = 7
+        self.num_params = 6
         num_obs = self.num_states + self.num_params
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(num_obs,), dtype=np.float64)
 

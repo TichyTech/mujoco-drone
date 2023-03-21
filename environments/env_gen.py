@@ -21,16 +21,18 @@ def make_drone(id=0, hue=1, params=None):
     model.default.geom.friction = (1, 0.5, 0.5)
     model.default.geom.margin = 0
 
-    model.default.joint.damping = 0.05
+    model.default.joint.damping = 0.15
     model.default.joint.armature = 0.0
 
     mass = params.get('mass', 1.35)
     motor_tau = params.get('motor_tau', 0.015)  # motor acts as a low pass filter with crossover frequency 1/motor_tau
     motor_force = params.get('motor_force', 7.5)
     arm_len = params.get('arm_len', 0.15)
-    pendulum = params.get('pendulum', False)
-    pendulum_length = params.get('pendulum_len', 0.2)
-    weight_mass = params.get('weight_mass', 0.2)
+
+    pendulum_length = params.get('pendulum_len', 0)
+    weight_mass = params.get('weight_mass', 0)
+    if pendulum_length > 0 and weight_mass > 0:
+        pendulum = True
     pole_mass = 0.2*pendulum_length
 
     half_body_size = 0.05

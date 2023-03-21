@@ -39,9 +39,9 @@ class MyCallbacks(DefaultCallbacks):
         """
 
         policy = algorithm.get_policy('default_policy')
-        for i, w in enumerate(policy.model.parameters()):
-            result['weights_norm_l%d' % i] = torch.norm(w).item()
-            result['grad_norm_l%d' % i] = torch.norm(w.grad).item()
+        for i, (n, w) in enumerate(policy.model.named_parameters()):
+            result['weights_norm_l%d_%s' % (i, n)] = torch.norm(w).item()
+            result['grad_norm_l%d_%s' % (i, n)] = torch.norm(w.grad).item()
 
 
 def custom_logger_creator(logdir):

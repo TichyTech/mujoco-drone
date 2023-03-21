@@ -23,20 +23,20 @@ base_config = {'seed': 42,
                'start_pos': [0, 0, 15, 0],  # x,y,z,yaw
                'max_distance': 4,  # if drone is further from reference than this number, terminate episode
                'random_start_pos': True,  # toggle initial pose position
-               'random_params': False,  # toggle randomizing drone parameters
+               'random_params': True,  # toggle randomizing drone parameters
                'pendulum': True,  # whether to include a pendulum on a drone
-               'difficulty': 0.5,
+               'difficulty': 0.4,
                'max_random_offset': 2,  # maximum position offset used for random sampling of starting position
                'rp_variance': [0.8, 0.8],  # variance used for random roll and pitch angle sampling
                'vel_variance': [1, 1, 1],  # variance used for random velocity sampling
                'ang_vel_variance': [1, 1, 1],  # variance used for random velocity sampling
-               'mass_interval': [1.2, 1.5],  # drone mass in kilograms
-               'arm_len_interval': [0.15, 0.18],  # drone arm length in meters
-               'motor_force_interval': [6, 9],  # what force the motor produces in Newtons, torque is also affected
-               'motor_tau_interval': [0.001, 0.005],  # time constant of the motor in seconds, 1/tau is crossover f of the LP filter
+               'mass_interval': [1.35, 0.15],  # drone mass in kilograms
+               'arm_len_interval': [0.17, 0.02],  # drone arm length in meters
+               'motor_force_interval': [7, 1],  # what force the motor produces in Newtons, torque is also affected
+               'motor_tau_interval': [0.01, 0.005],  # time constant of the motor in seconds, 1/tau is crossover f of the LP filter
+               'pendulum_length_interval': [1.2, 0.2],  # pendulum length in meters
+               'weight_mass_interval': [0.3, 0.05],  # weight of the pendulum mass in kilograms
                'pendulum_rp_variance': [0.5, 0.5],  # variance used for random velocity sampling
-               'pendulum_length_interval': [0.8, 1.5],  # pendulum length in meters
-               'weight_mass_interval': [0.1, 0.3],  # weight of the pendulum mass in kilograms
                'reward_fcn': default_reward_fcn,
                'terminated_fcn': default_termination_fcn,
                'max_steps': 512,  # maximum length of a single episode
@@ -78,12 +78,12 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.reference = config.get('reference', [0, 0, 0, 0])
         self.num_drones = config.get('num_drones', 1)
         self.pendulum = config.get('pendulum', True)
-        self.mass_interval = np.array(config.get('mass_interval', [0.8, 1.2]))
-        self.arm_len_interval = np.array(config.get('arm_len_interval', [0.15, 0.18]))
-        self.motor_force_interval = np.array(config.get('motor_force_interval', [5, 7]))
-        self.motor_tau_interval = np.array(config.get('motor_tau_interval', [0.005, 0.01]))
-        self.pendulum_length_interval = np.array(config.get('pendulum_length_interval', [0.0125, 0.0125]))
-        self.weight_mass_interval = np.array(config.get('weight_mass_interval', [0.2, 0.2]))
+        self.mass_interval = np.array(config.get('mass_interval', [1.35, 0.15]))
+        self.arm_len_interval = np.array(config.get('arm_len_interval', [0.17, 0.02]))
+        self.motor_force_interval = np.array(config.get('motor_force_interval', [7.5, 1.5]))
+        self.motor_tau_interval = np.array(config.get('motor_tau_interval', [0.003, 0.002]))
+        self.pendulum_length_interval = np.array(config.get('pendulum_length_interval', [1.2, 0.3]))
+        self.weight_mass_interval = np.array(config.get('weight_mass_interval', [0.2, 0.1]))
 
         # setup training parameters
         self.difficulty = config.get('difficulty', 0.1)
@@ -176,37 +176,37 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         """sample drone model parameters using specified parameters if enabled"""
         drone_params = []
         # load parameter intervals
-        l_bm, h_bm = self.mass_interval
-        l_al, h_al = self.arm_len_interval
-        l_mf, h_mf = self.motor_force_interval
-        l_mt, h_mt = self.motor_tau_interval
-        l_pl, h_pl = self.pendulum_length_interval
-        l_wm, h_wm = self.weight_mass_interval
+        c_m, w_m = self.mass_interval
+        c_al, w_al = self.arm_len_interval
+        c_mf, w_mf = self.motor_force_interval
+        c_mt, w_mt = self.motor_tau_interval
+        c_pl, w_pl = self.pendulum_length_interval
+        c_wm, w_wm = self.weight_mass_interval
         if self.random_params:
             # generate random values uniformly from the intervals
-            masses = self.np_random.uniform(l_bm, h_bm, self.num_drones)
-            arm_lens = self.np_random.uniform(l_al, h_al, self.num_drones)
-            motor_forces = self.np_random.uniform(l_mf, h_mf, self.num_drones)
-            motor_taus = self.np_random.uniform(l_mt, h_mt, self.num_drones)
-            pendulum_lens = self.np_random.uniform(l_pl, h_pl, self.num_drones)
-            weight_masses = self.np_random.uniform(l_wm, h_wm, self.num_drones)
+            masses = c_m + self.np_random.uniform(-w_m, w_m, self.num_drones)*self.difficulty
+            arm_lens = c_al + self.np_random.uniform(-w_al, w_al, self.num_drones)*self.difficulty
+            motor_forces = c_mf + self.np_random.uniform(-w_mf, w_mf, self.num_drones)*self.difficulty
+            motor_taus = c_mt + self.np_random.uniform(-w_mt, w_mt, self.num_drones)*self.difficulty
+            pendulum_lens = c_pl + self.np_random.uniform(-w_pl, w_pl, self.num_drones)*self.difficulty
+            weight_masses = c_wm + self.np_random.uniform(-w_wm, w_wm, self.num_drones)*self.difficulty
         else:
             # use mean values of the intervals instead
-            masses = 0.5*(h_bm + l_bm)*np.ones(self.num_drones)
-            arm_lens = 0.5*(l_al + h_al)*np.ones(self.num_drones)
-            motor_forces = 0.5*(l_mf + h_mf)*np.ones(self.num_drones)
-            motor_taus = 0.5*(l_mt + h_mt)*np.ones(self.num_drones)
-            pendulum_lens = 0.5*(h_pl + l_pl)*np.ones(self.num_drones)
-            weight_masses = 0.5*(h_wm + l_wm)*np.ones(self.num_drones)
+            masses = c_m*np.ones(self.num_drones)
+            arm_lens = c_al*np.ones(self.num_drones)
+            motor_forces = c_mf*np.ones(self.num_drones)
+            motor_taus = c_mt*np.ones(self.num_drones)
+            pendulum_lens = c_pl*np.ones(self.num_drones)
+            weight_masses = c_wm*np.ones(self.num_drones)
         # save parameters into a list of dictionaries
         for i in range(self.num_drones):
             params = {'mass': masses[i],
                       'arm_len': arm_lens[i],
                       'motor_force': motor_forces[i],
                       'motor_tau': motor_taus[i],
-                      'pendulum': 1*self.pendulum,
                       'pendulum_len': self.pendulum*pendulum_lens[i],
-                      'weight_mass': self.pendulum*weight_masses[i]}
+                      'weight_mass': self.pendulum*weight_masses[i],
+                      }
             drone_params.append(params)
         return drone_params
 
@@ -286,7 +286,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         if self.random_params and self.regen_env_at_steps and self.total_steps == self.regen_env_at_steps:
             self.total_steps = 0
             self.reset_model(regen=True)  # reset model with regenerated drone parameters
-            dones = np.ones(self.num_drones, dtype=bool)  # set all drones to terminated
+            truncated = np.ones(self.num_drones, dtype=bool)  # set all drones to terminated
 
         return self._get_obs(), rewards, dones, truncated, infos
 
@@ -294,12 +294,12 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         """regenerates all the drone states and also their model parameters if enabled """
         if regen:  # regenerate parameters of the drones and restart the simulation
             self.drone_params = self.generate_drone_params()
-            model = mjcf_to_mjmodel(make_arena(self.drone_params, self.reference))  # create a mujoco model
+            model = mjcf_to_mjmodel(make_arena(self.drone_params, self.frequency, self.mocaps))  # create a mujoco model
             self.close()
             extendedEnv.__init__(
                 self,
                 model,
-                4,
+                frame_skip=self.skip_steps,
                 render_mode=self.render_mode,
                 observation_space=self.observation_space,
                 width=self.width,
@@ -317,13 +317,11 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
 
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)  # reset per drone number of steps
         self.set_state(qpos, qvel)  # set the mujoco state
-        print('Environment reset')
         return self._get_obs()
 
     def vector_reset(self, seeds=None, options=None):
         """reset all the drones"""
         obs = self.reset_model()
-        print('Vector reset')
         infos = [{}]*self.num_drones
         return obs, infos
 

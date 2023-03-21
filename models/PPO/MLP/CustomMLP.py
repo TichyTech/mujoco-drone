@@ -101,3 +101,39 @@ class CustomMLP(TorchModelV2, nn.Module):
         for p in self.parameters():
             policy_loss[0] += wd*torch.norm(p)**2
         return policy_loss
+
+
+algo_config = PPOConfig() \
+    .training(gamma=0.985, lambda_=0.98, lr=0.001, sgd_minibatch_size=train_batch_size//4, clip_param=0.2,
+              train_batch_size=train_batch_size, model=model_config, num_sgd_iter=20) \
+    .resources(num_gpus=1) \
+    .rollouts(num_rollout_workers=num_processes, rollout_fragment_length=rollout_length)\
+    .framework(framework='torch') \
+    .environment(env=environment, env_config=train_env_config, normalize_actions=False)\
+    .exploration(explore=True, exploration_config={"type": "StochasticSampling", "random_timesteps": 10000})\
+    .debugging(seed=seed, logger_creator=custom_logger_creator(logdir))\
+    .callbacks(callbacks_class=MyCallbacks)\
+    .evaluation(evaluation_duration='auto', evaluation_interval=1, evaluation_parallel_to_training=True,
+                evaluation_config={'env_config': eval_env_config, 'explore': False}, evaluation_num_workers=1)
+
+
+
+# best params:
+# seed = 42
+# num_epochs = 500
+# train_drones = 64  # number of drones per training environment
+# num_processes = 8  # number parallel envs used for training
+# rollout_length = 512  # length of individual rollouts used in training
+# train_batch_size = num_processes * train_drones * rollout_length  # total length of the training data batch
+#
+# train_env_config = copy(base_config)
+# train_env_config['reward_fcn'] = distance_reward_fcn
+# train_env_config['num_drones'] = train_drones  # set number of drones used per environment for training in parallel
+# train_env_config['window_title'] = 'training'
+# train_env_config['max_steps'] = 2048
+# train_env_config['train_vis'] = 1   # how many training windows to render and show
+# train_env_config['seed'] = seed
+# train_env_config['difficulty'] = 0.5
+#
+# environment = LocalFrameRPYParamsEnv  # observation transform
+# dist = MyBetaDist

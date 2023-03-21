@@ -41,8 +41,8 @@ class RMA_model(TorchModelV2, nn.Module):
 
         if self.num_params > 0:
             self.param_encoder = nn.Sequential(
-                SlimFC(in_size=self.num_params, out_size=15, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
-                SlimFC(in_size=15, out_size=self.param_embed_dim, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
+                SlimFC(in_size=self.num_params, out_size=32, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
+                SlimFC(in_size=32, out_size=self.param_embed_dim, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
             )
 
         if self.num_params > 0:
@@ -50,13 +50,17 @@ class RMA_model(TorchModelV2, nn.Module):
         else:
             hidden_in_dim = self.num_states + self.num_actions
         self._hidden_layers = nn.Sequential(
-            SlimFC(in_size=hidden_in_dim, out_size=384, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
-            SlimFC(in_size=384, out_size=192, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
-            SlimFC(in_size=192, out_size=96, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
+            # nn.BatchNorm1d(hidden_in_dim),
+            SlimFC(in_size=hidden_in_dim, out_size=256, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
+            SlimFC(in_size=256, out_size=128, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
+            SlimFC(in_size=128, out_size=128, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
+            SlimFC(in_size=128, out_size=96, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
+            nn.BatchNorm1d(96)
         )
 
         self._logits = nn.Sequential(
             SlimFC(in_size=96, out_size=64, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
+            SlimFC(in_size=64, out_size=64, initializer=nn.init.xavier_normal_, activation_fn='tanh'),
             SlimFC(in_size=64, out_size=num_outputs, initializer=nn.init.xavier_normal_, activation_fn=None)
         )
 
@@ -95,21 +99,27 @@ class RMA_model(TorchModelV2, nn.Module):
         prev_actions = prev_actions.reshape(prev_actions.shape[0], -1)
         flat_in = torch.cat((obs[:, :self.num_states], prev_actions), dim=-1)
         # flat_in = obs[:, :self.num_states]  # flattened observations
-        drone_params = obs[:, self.num_states:]  # flattened drone parameters
         # set network training mode
         self._hidden_layers.train(mode=is_training)
         # forward pass
         if self.num_params > 0:
+            drone_params = obs[:, self.num_states:self.num_states + self.num_params]  # flattened drone parameters
             self.param_encoder.train(mode=is_training)
             z = self.param_encoder(drone_params)  # encode drone parameters
             self._features = self._hidden_layers(torch.cat((flat_in, z), dim=-1))
         else:
             self._features = self._hidden_layers(flat_in)
         logits = self._logits(self._features)
-        # logits[:, :self.num_outputs//2] = torch.tanh(logits[:, :self.num_outputs//2])
         return logits, state
 
     @override(TorchModelV2)
     def value_function(self) -> TensorType:
         assert self._features is not None, "must call forward() first"
         return self._value_branch(self._features).squeeze(1)
+
+    def custom_loss(self, policy_loss, loss_inputs):
+        # weight decay loss - gets added to ppo loss
+        wd = 1e-4
+        for p in self.parameters():
+            policy_loss[0] += wd*torch.norm(p)**2
+        return policy_loss
