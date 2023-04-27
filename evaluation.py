@@ -4,12 +4,14 @@ import os
 import numpy as np
 from ray.rllib.models import ModelCatalog
 from models.PPO.MLP.CustomMLP import CustomMLP
+from models.PPO.RMA.RMA_model import RMA_model_smaller2
 import matplotlib.pyplot as plt
 from distributions import MyBetaDist, MySquashedGaussian
-from environments.ObservationWrappers import LocalFrameRPYEnv
+from environments.ObservationWrappers import LocalFramePRYEnv, LocalFrameRPYParamsEnv, LocalFrameRPYFakeParamsEnv
 from environments.transformation import mujoco_rpy2quat
 import pickle as pkl
 from ray.rllib.policy.policy import Policy
+from environments.rewards import *
 
 
 def rollout_trajectory(env, algo):
@@ -96,41 +98,49 @@ def load_policy_state(checkpoint):
     return policy_state
 
 
-model_dir = 'models/PPO/MLP/checkpoints/'
-checkpoint_to_load = 'checkpoint_000140'
-load_checkpoint = True
+environment = LocalFrameRPYParamsEnv  # observation transform
+reward_fcn = distance_energy_reward_pendulum_angle
+model = RMA_model_smaller2
+dist = MyBetaDist
+
+checkpoint_dir = 'models/PPO/RMA/checkpoints/'  # directory where to look for checkpoints
+checkpoint_to_load = 'checkpoint_000110'  # saved checkpoint name
+load_checkpoint = 1
 
 # environment configuration
 eval_env_config = base_config
+eval_env_config['num_drones'] = 1
 eval_env_config['controlled'] = True
-eval_env_config['window_title'] = 'evaluation'
+eval_env_config['max_distance'] = 3
+eval_env_config['reward_fcn'] = reward_fcn
+eval_env_config['max_steps'] = 2048
+eval_env_config['state_difficulty'] = 0.4
+eval_env_config['param_difficulty'] = 2.5
 
-# model_config = load_model_config(model_dir)
-
-ModelCatalog.register_custom_model("CustomModel", CustomMLP)
-ModelCatalog.register_custom_action_dist('MyBetaDist', MyBetaDist)
+ModelCatalog.register_custom_model(model.__name__, model)
+ModelCatalog.register_custom_action_dist(dist.__name__, dist)
 model_config = {
-    "custom_model": "CustomModel",
-    "custom_model_config": {'num_states': 18,
-                            'num_params': 0,
-                            'num_actions': 4
+    "custom_model": 'RMA_model_smaller2',
+    "custom_model_config": {'num_states': 16,
+                            'num_params': 6,
+                            'num_actions': 0,
+                            'param_embed_dim': 32
                             },
-    "custom_action_dist": "MyBetaDist",
+    "custom_action_dist": 'MyBetaDist',
     # "max_seq_len": 32  # this is to set maximum sequence length for recurrent network observations
 }
-
 obs_space = gymnasium.spaces.Box(-np.inf, np.inf, (18, ))
 act_space = gymnasium.spaces.Box(0, 1, (4, ))
 
 
 if __name__ == '__main__':
     # load torch model
-    model = CustomMLP(obs_space, act_space, 4, model_config, 'test_model')
-    state = load_policy_state(model_dir + checkpoint_to_load)
+    # model = RMA_model_smaller2(obs_space, act_space, 4, model_config, 'test_model')
+    state = load_policy_state(checkpoint_dir + checkpoint_to_load)
     policy = Policy.from_state(state)
-    eval_env = LocalFrameRPYEnv(eval_env_config)
+    eval_env = environment(eval_env_config)
 
-    t, trajectory = gen_circle_trajectory()
+    t, trajectory = gen_ramp_trajectory()
     trajectory = trajectory + [[0, 0, 15, 0]]
     observations, actions, rewards = evaluate_trajectory(eval_env, policy, trajectory)
     plt.subplot(3, 1, 1)
