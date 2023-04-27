@@ -1,22 +1,19 @@
+import torch
 from ray.rllib.algorithms.ppo import PPOConfig
 from environments.BaseDroneEnv import BaseDroneEnv, base_config
 from copy import copy
 from training import train
 import os
 from datetime import datetime
-from models.PPO.RMA.RMA_model import RMA_model, RMA_model_smaller, RMA_model_smaller2, RMA_full
-from models.PPO.MLP.CustomMLP import CustomMLP
-from models.PPO.SimpleMLP.SimpleMLP import SimpleMLPmodel
-from models.PPO.CustomLSTM.CustomLSTM import CustomLSTM, CustomLSTMbigger, CustomLSTMbiggerCommonF
-from models.PPO.Transformer.Transformer import Transformer_model
+from models.PPO.RMA.RMA_model import RMA_full
 from environments.rewards import *
 from ray.rllib.models import ModelCatalog
 from custom_logging import MyCallbacks, custom_logger_creator
 from environments.ObservationWrappers import *
-from distributions import MyBetaDist, MySquashedGaussian
-from ray import tune
-from ray.tune.schedulers import PopulationBasedTraining
+from distributions import MyBetaDist
 from ray.tune.result import DEFAULT_RESULTS_DIR
+from evaluation import load_policy_state
+
 
 seed = 42
 
@@ -30,7 +27,7 @@ reward_fcn = distance_energy_reward
 # load checkpoint?
 checkpoint_dir = 'models/PPO/RMA/checkpoints/'  # directory where to look for checkpoints
 checkpoint_to_load = 'checkpoint_000050'  # saved checkpoint name
-load_checkpoint = 0
+load_checkpoint = 1
 
 # setting the parameters
 ModelCatalog.register_custom_model(model.__name__, model)
@@ -41,7 +38,7 @@ model_config = {
                             'num_params': 6,
                             'num_actions': 4,
                             'param_embed_dim': 32,
-                            'train_adaptation': False,
+                            'train_adaptation': True,
                             'adapt_seq_len': 32
                             },
     "custom_action_dist": dist.__name__,
@@ -85,11 +82,10 @@ os.mkdir(logdir)  # create empty directory for logging
 
 
 # PPO configuration
-lr_s = [[0, 0.00002], [1e8, 0.000001]]
 
-algo_config = PPOConfig() \
-    .training(gamma=0.985, lambda_=0.96, lr=0.000001, sgd_minibatch_size=train_batch_size//16, clip_param=0.2,
-              train_batch_size=train_batch_size, model=model_config, num_sgd_iter=10) \
+policy_training_config = PPOConfig() \
+    .training(gamma=0.985, lambda_=0.96, lr=0.0001, sgd_minibatch_size=train_batch_size//16, clip_param=0.2,
+              train_batch_size=train_batch_size, model=model_config, num_sgd_iter=5, kl_coeff=0) \
     .resources(num_gpus=1) \
     .rollouts(num_rollout_workers=num_processes, rollout_fragment_length=rollout_length)\
     .framework(framework='torch') \
@@ -100,46 +96,20 @@ algo_config = PPOConfig() \
     .evaluation(evaluation_duration='auto', evaluation_interval=1, evaluation_parallel_to_training=True,
                 evaluation_config={'env_config': eval_env_config, 'explore': False}, evaluation_num_workers=1) \
 
-# pbt = PopulationBasedTraining(
-#     time_attr="time_total_s",
-#     perturbation_interval=120,
-#     resample_probability=0.25,
-#     hyperparam_mutations={
-#         "gamma": [0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1],
-#         "lambda": [0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1],
-#         "clip_param": tune.uniform(0.05, 0.4),
-#         "lr": tune.uniform(1e-5, 1e-2),
-#         "num_sgd_iter": tune.randint(1, 30),
-#     }
-# )
-#
-# tuner = tune.Tuner(
-#     "PPO",
-#     tune_config=tune.TuneConfig(
-#         metric="episode_reward_mean",
-#         mode="max",
-#         scheduler=pbt,
-#         num_samples=4,
-#     ),
-#     param_space=algo_config.to_dict()
-# )
-
 
 if __name__ == '__main__':
-    algo = algo_config.build()
-    if load_checkpoint:
-        if not os.path.exists(checkpoint_dir + checkpoint_to_load):
-            print('There is no file named %s' % (checkpoint_dir + checkpoint_to_load))
-        else:
-            algo.restore(checkpoint_dir + checkpoint_to_load)
-            print('checkpoint from {} loaded'.format(checkpoint_dir + checkpoint_to_load))
+    policy_algo = policy_training_config.build()
 
-    # eval_env = VecDrone(eval_env_config)  # create an environment for evaluation
+    loaded_state = load_policy_state(checkpoint_dir + checkpoint_to_load)
+    new_state_dict = policy_algo.get_policy().model.state_dict()  # load state dict
+    for (ks, vs) in loaded_state['weights'].items():
+        if 'adaptation_module' in ks:  # skip adaptation module
+            continue
+        new_state_dict[ks].copy_(torch.from_numpy(vs))  # copy all other modules
+    policy_algo.get_policy().model.load_state_dict(new_state_dict)
+    policy_algo.workers.sync_weights()
 
-    train(algo, num_epochs, checkpoint_dir)
+    train(policy_algo, 100, checkpoint_dir)
+    policy_algo.stop()
 
-    # results = tuner.fit()
-    # print("best hyperparameters: ", results.get_best_result().config)
-
-    algo.stop()
 

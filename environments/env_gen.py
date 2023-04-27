@@ -63,8 +63,11 @@ def make_drone(id=0, hue=1, params=None):
                            ctrllimited=True, ctrlrange=(0, 1), dyntype='filter',
                            dynprm=[motor_tau, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     if pendulum:
-        pend = core.add('body', name='pendulum', pos=(0, 0, -half_body_size/3))
-        pend.add('joint', type='ball', pos=(0, 0, 0))
+        link = core.add('body', name='link', pos=(0, 0, -half_body_size/2))
+        link.add('joint', type='hinge', axis=[1, 0, 0])
+        link.add('geom', type='sphere', size=[0.02], mass=0.01)
+        pend = link.add('body', name='pendulum')
+        pend.add('joint', type='hinge', axis=[0, 1, 0])
         pend.add('geom', size=(0.005, pendulum_length/2), pos=(0, 0, -pendulum_length/2), type='cylinder', mass=pole_mass, rgba=[0.3, 0.3, 0.3, 1])
         pend.add('geom', pos=(0, 0, -pendulum_length), type='box', size=[0.1*np.cbrt(weight_mass), 0.1*np.cbrt(weight_mass), 0.1*np.cbrt(weight_mass)], mass=weight_mass)
     return model

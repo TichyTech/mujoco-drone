@@ -25,18 +25,20 @@ base_config = {'seed': 42,
                'random_start_pos': True,  # toggle initial pose position
                'random_params': True,  # toggle randomizing drone parameters
                'pendulum': True,  # whether to include a pendulum on a drone
-               'difficulty': 0.4,
+               'state_difficulty': 0.4,  # initial state variance scaling
+               'param_difficulty': 0.1,  # drone parameter distribution scaling
                'max_random_offset': 2,  # maximum position offset used for random sampling of starting position
                'rp_variance': [0.8, 0.8],  # variance used for random roll and pitch angle sampling
                'vel_variance': [1, 1, 1],  # variance used for random velocity sampling
                'ang_vel_variance': [1, 1, 1],  # variance used for random velocity sampling
-               'mass_interval': [1.35, 0.15],  # drone mass in kilograms
+               'mass_interval': [1, 0.1],  # drone mass in kilograms
                'arm_len_interval': [0.17, 0.02],  # drone arm length in meters
                'motor_force_interval': [7, 1],  # what force the motor produces in Newtons, torque is also affected
-               'motor_tau_interval': [0.01, 0.005],  # time constant of the motor in seconds, 1/tau is crossover f of the LP filter
+               'motor_tau_interval': [0.01, 0.0025],  # time constant of the motor in seconds, 1/tau is crossover f of the LP filter
                'pendulum_length_interval': [1.2, 0.2],  # pendulum length in meters
                'weight_mass_interval': [0.3, 0.05],  # weight of the pendulum mass in kilograms
-               'pendulum_rp_variance': [0.5, 0.5],  # variance used for random velocity sampling
+               'pendulum_rp_variance': [0.5, 0.5],  # variance used for random pendulum angle sampling
+               'pendulum_ang_vel_variance': [0.5, 0.5],  # variance used for random pendulum velocity sampling
                'reward_fcn': default_reward_fcn,
                'terminated_fcn': default_termination_fcn,
                'max_steps': 512,  # maximum length of a single episode
@@ -86,7 +88,8 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.weight_mass_interval = np.array(config.get('weight_mass_interval', [0.2, 0.1]))
 
         # setup training parameters
-        self.difficulty = config.get('difficulty', 0.1)
+        self.state_difficulty = config.get('state_difficulty', 0.1)
+        self.param_difficulty = config.get('param_difficulty', 0.1)
         self.random_start_pos = config.get('random_start_pos', False)
         self.random_params = config.get('random_params', False)
         self.regen_env_at_steps = config.get('regen_env_at_steps', None)
@@ -95,11 +98,12 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.reward_fcn = config.get('reward_fcn', default_reward_fcn)
         self.terminated_fcn = config.get('terminated_fcn', default_termination_fcn)
         self.max_steps = config.get('max_steps', 512)
-        self.max_pos_offset = self.difficulty*config.get('max_random_offset', 0)
-        self.angle_variance = self.difficulty*np.array(config.get('angle_variance', [0, 0]))
-        self.ang_vel_variance = self.difficulty*np.array(config.get('ang_vel_variance', [0, 0, 0]))
-        self.vel_variance = self.difficulty*np.array(config.get('vel_variance', [0, 0, 0]))
-        self.pendulum_rp_variance = self.difficulty*np.array(config.get('pendulum_rp_variance', [0, 0]))
+        self.max_pos_offset = self.state_difficulty*config.get('max_random_offset', 0)
+        self.angle_variance = self.state_difficulty*np.array(config.get('angle_variance', [0, 0]))
+        self.ang_vel_variance = self.state_difficulty*np.array(config.get('ang_vel_variance', [0, 0, 0]))
+        self.vel_variance = self.state_difficulty*np.array(config.get('vel_variance', [0, 0, 0]))
+        self.pendulum_rp_variance = self.state_difficulty*np.array(config.get('pendulum_rp_variance', [0, 0]))
+        self.pendulum_ang_vel_variance = self.state_difficulty*np.array(config.get('pendulum_ang_vel_variance', [0, 0]))
 
         # setup
         self.total_steps = 0
@@ -113,7 +117,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.drone_params = self.generate_drone_params()
         self.num_params = len(self.drone_params[0])
         if self.pendulum:  # pendulum enabled
-            self.num_states = 25
+            self.num_states = 23
         else:
             self.num_states = 19
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(self.num_states + self.num_params,), dtype=np.float64)
@@ -184,12 +188,12 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         c_wm, w_wm = self.weight_mass_interval
         if self.random_params:
             # generate random values uniformly from the intervals
-            masses = c_m + self.np_random.uniform(-w_m, w_m, self.num_drones)*self.difficulty
-            arm_lens = c_al + self.np_random.uniform(-w_al, w_al, self.num_drones)*self.difficulty
-            motor_forces = c_mf + self.np_random.uniform(-w_mf, w_mf, self.num_drones)*self.difficulty
-            motor_taus = c_mt + self.np_random.uniform(-w_mt, w_mt, self.num_drones)*self.difficulty
-            pendulum_lens = c_pl + self.np_random.uniform(-w_pl, w_pl, self.num_drones)*self.difficulty
-            weight_masses = c_wm + self.np_random.uniform(-w_wm, w_wm, self.num_drones)*self.difficulty
+            masses = c_m + self.np_random.uniform(-w_m, w_m, self.num_drones)*self.param_difficulty
+            arm_lens = c_al + self.np_random.uniform(-w_al, w_al, self.num_drones)*self.param_difficulty
+            motor_forces = c_mf + self.np_random.uniform(-w_mf, w_mf, self.num_drones)*self.param_difficulty
+            motor_taus = c_mt + self.np_random.uniform(-w_mt, w_mt, self.num_drones)*self.param_difficulty
+            pendulum_lens = c_pl + self.np_random.uniform(-w_pl, w_pl, self.num_drones)*self.param_difficulty
+            weight_masses = c_wm + self.np_random.uniform(-w_wm, w_wm, self.num_drones)*self.param_difficulty
         else:
             # use mean values of the intervals instead
             masses = c_m*np.ones(self.num_drones)
@@ -233,9 +237,9 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
                 # sample roll and pitch from clipped gaussian
                 pendulum_rp = self.np_random.normal(scale=self.pendulum_rp_variance)\
                     .clip(min=-2 * self.pendulum_rp_variance, max=2 * self.pendulum_rp_variance)
-                pendulum_qpos = mujoco_rpy2quat(np.append(pendulum_rp, 0))
-                pendulum_vel = [0, 0, 0]  # zero initial velocity for now
-                qpos = np.concatenate((qpos, pendulum_qpos))
+                pendulum_vel = self.np_random.normal(scale=self.pendulum_ang_vel_variance)\
+                    .clip(min=-2 * self.pendulum_ang_vel_variance, max=2 * self.pendulum_ang_vel_variance)
+                qpos = np.concatenate((qpos, pendulum_rp))
                 qvel = np.concatenate((qvel, pendulum_vel))
         else:
             # deterministic inital pose
@@ -247,10 +251,8 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             ang_vel = [0, 0, 0]
             qvel = np.concatenate((vel, ang_vel))
             if self.pendulum:
-                pendulum_qpos = mujoco_rpy2quat([0, 0, 0])  # all zeroes for now
-                pendulum_vel = [0, 0, 0]
-                qpos = np.concatenate((qpos, pendulum_qpos))
-                qvel = np.concatenate((qvel, pendulum_vel))
+                qpos = np.concatenate((qpos, [0, 0]))
+                qvel = np.concatenate((qvel, [0, 0]))
         return qpos, qvel
 
     def vector_step(self, actions):
@@ -308,8 +310,10 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
 
         qpos = self.init_qpos  # copy mujoco state vector
         qvel = self.init_qvel
-        p_offset = 4 * self.pendulum  # if there is pendulum, add extra offset to indeces
-        v_offset = 3 * self.pendulum
+        assert len(qpos) == self.num_drones*(7 + 2*self.pendulum)
+        assert len(qvel) == self.num_drones*(6 + 2*self.pendulum)
+        p_offset = 2 * self.pendulum  # if there is pendulum, add extra offset to indeces
+        v_offset = 2 * self.pendulum
         for i in range(self.num_drones):  # generate initial poses and populate the mujoco state array
             qpos_i, qvel_i = self.sample_state()
             qpos[(7 + p_offset) * i:(7 + p_offset) * (i + 1)] = qpos_i
@@ -331,8 +335,8 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             index = 0
         assert index < self.num_drones
 
-        p_offset = 4 * self.pendulum  # add extra offset if there is pendulum state enabled
-        v_offset = 3 * self.pendulum
+        p_offset = 2 * self.pendulum  # add extra offset if there is pendulum state enabled
+        v_offset = 2 * self.pendulum
         qpos = self.data.qpos[:]  # copy mujoco state
         qvel = self.data.qvel[:]
         qpos_i, qvel_i = self.sample_state()  # generate an initial state
@@ -355,8 +359,8 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         The vectors are represented in the global coordinate frame.
         """
         states = []  # state info for every drone
-        pos_idx_offset = 4 * self.pendulum  # add an index offset if pendulum is enabled
-        vel_idx_offset = 3 * self.pendulum
+        pos_idx_offset = 2 * self.pendulum  # add an index offset if pendulum is enabled
+        vel_idx_offset = 2 * self.pendulum
         for i in range(self.num_drones):
             # all these observations correspond to the free joint coordinates and thus are in global coord. frame
             pos = self.data.qpos[(7 + pos_idx_offset)*i:(7 + pos_idx_offset)*i + 3]  # xyz position
@@ -365,9 +369,9 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             ang_vel = self.data.qvel[(6 + vel_idx_offset)*i + 3:(6 + vel_idx_offset)*i + 6]  # rpy velocity (probably in different order)
             acc = self.data.sensordata[i*3:i*3+3]  # accelerometer data (given there is only one sensor on each drone)
             if self.pendulum:
-                pendulum_rpy = mujoco_quat2rpy(self.data.qpos[(7 + pos_idx_offset)*i + 7:(7 + pos_idx_offset)*i + 11])
-                pendulum_ang_vel = self.data.qvel[(6 + vel_idx_offset)*i + 6:(6 + vel_idx_offset)*i + 9]
-                obs = np.concatenate((pos, rpy, vel, ang_vel, pendulum_rpy, pendulum_ang_vel, acc, self.reference, list(self.drone_params[i].values())))
+                pendulum_rp = self.data.qpos[(7 + pos_idx_offset)*i + 7:(7 + pos_idx_offset)*(i + 1)]
+                pendulum_ang_vel = self.data.qvel[(6 + vel_idx_offset)*i + 6:(6 + vel_idx_offset)*(i + 1)]
+                obs = np.concatenate((pos, rpy, vel, ang_vel, pendulum_rp, pendulum_ang_vel, acc, self.reference, list(self.drone_params[i].values())))
             else:
                 obs = np.concatenate((pos, rpy, vel, ang_vel, acc, self.reference, list(self.drone_params[i].values())))
             states.append(obs)  # add state to state list
