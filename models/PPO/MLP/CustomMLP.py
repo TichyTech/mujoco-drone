@@ -103,22 +103,19 @@ class CustomMLP(TorchModelV2, nn.Module):
         return policy_loss
 
 
-algo_config = PPOConfig() \
-    .training(gamma=0.985, lambda_=0.98, lr=0.001, sgd_minibatch_size=train_batch_size//4, clip_param=0.2,
-              train_batch_size=train_batch_size, model=model_config, num_sgd_iter=20) \
-    .resources(num_gpus=1) \
-    .rollouts(num_rollout_workers=num_processes, rollout_fragment_length=rollout_length)\
-    .framework(framework='torch') \
-    .environment(env=environment, env_config=train_env_config, normalize_actions=False)\
-    .exploration(explore=True, exploration_config={"type": "StochasticSampling", "random_timesteps": 10000})\
-    .debugging(seed=seed, logger_creator=custom_logger_creator(logdir))\
-    .callbacks(callbacks_class=MyCallbacks)\
-    .evaluation(evaluation_duration='auto', evaluation_interval=1, evaluation_parallel_to_training=True,
-                evaluation_config={'env_config': eval_env_config, 'explore': False}, evaluation_num_workers=1)
-
-
-
 # best params:
+# algo_config = PPOConfig() \
+#     .training(gamma=0.985, lambda_=0.98, lr=0.001, sgd_minibatch_size=train_batch_size//4, clip_param=0.2,
+#               train_batch_size=train_batch_size, model=model_config, num_sgd_iter=20) \
+#     .resources(num_gpus=1) \
+#     .rollouts(num_rollout_workers=num_processes, rollout_fragment_length=rollout_length)\
+#     .framework(framework='torch') \
+#     .environment(env=environment, env_config=train_env_config, normalize_actions=False)\
+#     .exploration(explore=True, exploration_config={"type": "StochasticSampling", "random_timesteps": 10000})\
+#     .debugging(seed=seed, logger_creator=custom_logger_creator(logdir))\
+#     .callbacks(callbacks_class=MyCallbacks)\
+#     .evaluation(evaluation_duration='auto', evaluation_interval=1, evaluation_parallel_to_training=True,
+#                 evaluation_config={'env_config': eval_env_config, 'explore': False}, evaluation_num_workers=1)
 # seed = 42
 # num_epochs = 500
 # train_drones = 64  # number of drones per training environment

@@ -9,16 +9,16 @@ class PositionController:
         self.error_i = np.zeros((3, self.num_drones))
         self.error_prev = np.zeros((3, self.num_drones))
         self.P = np.array([[0.4], [0.4], [0.6]])
-        self.I = np.array([[0.06], [0.06], [0.1]])
-        self.D = np.array([[0.7], [0.7], [0.2]])
+        self.I = np.array([[0.0], [0.0], [0.1]])
+        self.D = np.array([[0.15], [0.15], [0.2]])
 
-        self.motor_force = 0.6
         self.first_step = True
-        self.dt = 0.01
+        self.dt = 0.02
 
     def compute_control(self, ref, xyz):
         """given a reference xyz, adjust tilts and thrust accordingly"""
         e = ref[None].T - xyz  # compute control error from xyz
+        e = np.clip(e, -2, 2)  # restrict the error to +-2
         if self.first_step:  # disable derivate on first step
             self.error_prev = e
             self.first_step = False

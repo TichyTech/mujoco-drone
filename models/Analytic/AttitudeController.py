@@ -10,7 +10,7 @@ class AttittudeController:
         self.error_i = np.zeros((3, self.num_drones))
         self.error_prev = np.zeros((3, self.num_drones))
         self.P = np.array([[2], [2], [3]])
-        self.I = np.array([[0.1], [0.1], [0]])
+        self.I = np.array([[0.0], [0.0], [0]])
         self.D = np.array([[0.2], [0.2], [0.25]])
         self.mixer = np.array([[1, 1, -1, -1],
                                [-1, 1, 1, -1],
@@ -19,7 +19,7 @@ class AttittudeController:
         self.motor_forces = np.array(forces)[None]
         self.masses = np.array(masses)[None]
         self.first_step = True
-        self.dt = 0.01
+        self.dt = 0.02
 
     def tilts2rpy(self, pos_action, heading_ref):
         tilt_x, tilt_y = pos_action[:2]
