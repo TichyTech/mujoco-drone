@@ -9,7 +9,7 @@ class PositionController:
         self.error_i = np.zeros((3, self.num_drones))
         self.error_prev = np.zeros((3, self.num_drones))
         self.P = np.array([[0.4], [0.4], [0.6]])
-        self.I = np.array([[0.0], [0.0], [0.1]])
+        self.I = np.array([[0.0], [0.0], [0.01]])
         self.D = np.array([[0.15], [0.15], [0.2]])
 
         self.first_step = True

@@ -9,11 +9,11 @@ class AttittudeController:
 
         self.error_i = np.zeros((3, self.num_drones))
         self.error_prev = np.zeros((3, self.num_drones))
-        self.P = np.array([[2], [2], [3]])
+        self.P = np.array([[2], [2], [0.1]])
         self.I = np.array([[0.0], [0.0], [0]])
-        self.D = np.array([[0.2], [0.2], [0.25]])
-        self.mixer = np.array([[1, 1, -1, -1],
-                               [-1, 1, 1, -1],
+        self.D = np.array([[0.2], [0.2], [0]])
+        self.mixer = np.array([[-1, 1, 1, -1],
+                               [-1, -1, 1, 1],
                                [1, -1, 1, -1]]).T
 
         self.motor_forces = np.array(forces)[None]
