@@ -22,6 +22,6 @@ def train(algo, num_epochs, checkpoint_dir='training/checkpoints', checkpoint_ep
         elapsed = int(time() - start)
         print("Elapsed time: {:3d}h {:2d}m; ep. {:4d}, avg.e.r.={:.3f}, avg. l={:.2f}, avg.a.r.={:.2f}".format(elapsed//3600, (elapsed//60)%60, ep + 1,
               results['episode_reward_mean'], results['episode_len_mean'], mean_action_reward))
-        algo.evaluate()
+        # algo.evaluate()
         if (ep + 1) % checkpoint_ep == 0:
             print("Saving checkpoint to {}".format(algo.save(checkpoint_dir)))  # save checkpoint
