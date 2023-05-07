@@ -22,3 +22,8 @@ def mujoco_rpy2quat(rpy):
     """convert from roll pitch yaw angles to mujoco quaternion"""
     quat = R.from_euler('ZYX', rpy[::-1]).as_quat()
     return np.append(quat[3], quat[:3])
+
+
+def mujoco_pendulumrp2quat(pendulum_rp):
+    quat = R.from_euler('XY', pendulum_rp).as_quat()
+    return np.append(quat[3], quat[:3])
