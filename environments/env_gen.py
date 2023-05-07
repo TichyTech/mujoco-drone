@@ -2,7 +2,6 @@ import numpy as np
 from matplotlib.colors import hsv_to_rgb
 from dm_control import mjcf
 from dm_control import mujoco
-from scipy.spatial.transform import Rotation as R
 
 
 def make_drone(id=0, hue=1, params=None):
@@ -31,6 +30,7 @@ def make_drone(id=0, hue=1, params=None):
 
     pendulum_length = params.get('pendulum_len', 0)
     weight_mass = params.get('weight_mass', 0)
+    pendulum = False
     if pendulum_length > 0 and weight_mass > 0:
         pendulum = True
     pole_mass = 0.2*pendulum_length
@@ -51,7 +51,7 @@ def make_drone(id=0, hue=1, params=None):
     # model.sensor.add('magnetometer', name='mag_%d' % id, site='sense')
     # core.add('camera', name='dronecam_%d' % id, pos=(half_body_size/2, 0, half_body_size/4), euler=[0, -np.pi/2, 0])
     for i in range(4):
-        theta = i * np.pi / 2 + np.pi/4
+        theta = i * np.pi / 2 - np.pi/4
         arm_pos = (np.sqrt(2)*half_body_size + 0.5*arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
         rot_pos = (np.sqrt(2)*half_body_size + arm_len) * np.array([np.cos(theta), np.sin(theta), 0])
         prop_radius = arm_len/1.5
@@ -59,7 +59,7 @@ def make_drone(id=0, hue=1, params=None):
         core.add('site', name='motorsite_%d' % i, type='cylinder', pos=rot_pos, size=(0.015, arm_len/20), rgba=[0.3, 0.3, 0.3, 3])
         core.add('geom', name='motor_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.015]), size=(0.01, 0.01), rgba=[0.1, 0.1, 0.1, 1], mass=motor_mass)
         core.add('geom', name='prop_%d' % i, type='cylinder', pos=rot_pos + np.array([0, 0, 0.025]), size=(prop_radius, 0.0025), mass=0, rgba=rgba_transparent)
-        model.actuator.add('general', name='motor_%d' % i, site='motorsite_%d' % i, gear=(0, 0, motor_force, 0, 0, motor_force/1000*(-1)**i),
+        model.actuator.add('general', name='motor_%d' % i, site='motorsite_%d' % i, gear=(0, 0, motor_force, 0, 0, motor_force/100*(-1)**i),
                            ctrllimited=True, ctrlrange=(0, 1), dyntype='filter',
                            dynprm=[motor_tau, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     if pendulum:
@@ -73,7 +73,7 @@ def make_drone(id=0, hue=1, params=None):
     return model
 
 
-def make_arena(drone_params=[None], frequency=1000, mocaps=1):
+def make_sim(drone_params=[None], frequency=1000, mocaps=1):
     arena = mjcf.RootElement(model='arena')
 
     arena.size.nconmax = 1000  # set maximum number of collisions
