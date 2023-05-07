@@ -1,7 +1,7 @@
 import numpy as np
 from gymnasium import utils
 from .mujoco_env_custom import extendedEnv
-from .env_gen import make_arena, mjcf_to_mjmodel
+from .env_gen import make_sim, mjcf_to_mjmodel
 from .joystick import PS4Controller
 from gymnasium.spaces import Box
 from ray.rllib.env.vector_env import VectorEnv
@@ -17,8 +17,8 @@ def default_termination_fcn(env, state, action, num_steps):
 
 
 base_config = {'seed': 42,
-               'frequency': 200,  # physics simulator frequency
-               'skip_steps': 2,  # policy takes action every skip_steps steps
+               'frequency': 100,  # physics simulator frequency
+               'skip_steps': 1,  # policy takes action every skip_steps steps
                'reference': [0, 0, 15, 0],  # x,y,z,yaw
                'start_pos': [0, 0, 15, 0],  # x,y,z,yaw
                'max_distance': 4,  # if drone is further from reference than this number, terminate episode
@@ -60,7 +60,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.controlled = config.get('controlled', False)  # is this environment using controlled reference?
         # toggle visualization window
         worker_index = getattr(config, 'worker_index', -1)
-        if worker_index <= config.get('train_vis', 0) or self.controlled:
+        if (worker_index <= config.get('train_vis', 0)) or self.controlled:
             self.render_mode = 'human'
         else:
             self.render_mode = None
@@ -115,14 +115,14 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
 
         # generate randomized parameters for each drone and save them into a list
         self.drone_params = self.generate_drone_params()
-        self.num_params = len(self.drone_params[0])
+        self.num_params = len(self.drone_params[0])  # number of parameters per drone
         if self.pendulum:  # pendulum enabled
-            self.num_states = 23
+            self.num_states = 27
         else:
-            self.num_states = 19
+            self.num_states = 23
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(self.num_states + self.num_params,), dtype=np.float64)
         self.action_space = Box(low=0, high=1, shape=(4,), dtype=np.float64, seed=self.np_random)
-        model = mjcf_to_mjmodel(make_arena(self.drone_params, self.frequency, self.mocaps))  # create a mujoco model
+        model = mjcf_to_mjmodel(make_sim(self.drone_params, self.frequency, self.mocaps))  # create a mujoco model
 
         self.metadata = {
             "render_modes": [
@@ -145,6 +145,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
 
         # init VectorEnv for rllib
         VectorEnv.__init__(self, self.observation_space, self.action_space, self.num_drones)
+        self.states = self.get_drone_states()
         print('Environment ready')
 
     def control_reference(self):
@@ -269,11 +270,11 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         self.do_simulation(ctrl, self.frame_skip)
         self.num_steps = self.num_steps + 1  # keep count of episode lengths
         self.total_steps += 1  # keep count of total simulation steps performed
+        self.states = self.get_drone_states()  # update states after simulation step
 
-        states = self.get_drone_states()
-        obs, rewards, dones, truncated, infos = [], [], [], [], []
+        rewards, dones, truncated, infos = [], [], [], []
         for i in range(self.num_drones):
-            state_i = states[i]  # load state
+            state_i = self.states[i]  # load state
             truncate = self.terminated_fcn(self, state_i, actions[i], self.num_steps[i])  # decide episode termination
             reward = self.reward_fcn(self, state_i, actions[i], self.num_steps[i])  # compute reward
             # add all values to the output lists
@@ -296,7 +297,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
         """regenerates all the drone states and also their model parameters if enabled """
         if regen:  # regenerate parameters of the drones and restart the simulation
             self.drone_params = self.generate_drone_params()
-            model = mjcf_to_mjmodel(make_arena(self.drone_params, self.frequency, self.mocaps))  # create a mujoco model
+            model = mjcf_to_mjmodel(make_sim(self.drone_params, self.frequency, self.mocaps))  # create a mujoco model
             self.close()
             extendedEnv.__init__(
                 self,
@@ -321,6 +322,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
 
         self.num_steps = np.zeros((self.num_drones, ), dtype=np.long)  # reset per drone number of steps
         self.set_state(qpos, qvel)  # set the mujoco state
+        self.states = self.get_drone_states()  # update states after simulation step
         return self._get_obs()
 
     def vector_reset(self, seeds=None, options=None):
@@ -350,8 +352,7 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
 
     def _get_obs(self):
         """defaults observation function consists of just the states"""
-        obs = self.get_drone_states()
-        return obs
+        return self.states
 
     def get_drone_states(self):
         """Returns an array of per drone states. Each state consists of the position, rpy angles, velocity,
@@ -368,12 +369,13 @@ class BaseDroneEnv(extendedEnv, VectorEnv, utils.EzPickle):
             vel = self.data.qvel[(6 + vel_idx_offset)*i:(6 + vel_idx_offset)*i + 3]  # xyz velocity
             ang_vel = self.data.qvel[(6 + vel_idx_offset)*i + 3:(6 + vel_idx_offset)*i + 6]  # rpy velocity (probably in different order)
             acc = self.data.sensordata[i*3:i*3+3]  # accelerometer data (given there is only one sensor on each drone)
+            act = self.data.act[i*4:(i+1)*4]
             if self.pendulum:
                 pendulum_rp = self.data.qpos[(7 + pos_idx_offset)*i + 7:(7 + pos_idx_offset)*(i + 1)]
                 pendulum_ang_vel = self.data.qvel[(6 + vel_idx_offset)*i + 6:(6 + vel_idx_offset)*(i + 1)]
-                obs = np.concatenate((pos, rpy, vel, ang_vel, pendulum_rp, pendulum_ang_vel, acc, self.reference, list(self.drone_params[i].values())))
+                obs = np.concatenate((pos, rpy, vel, ang_vel, pendulum_rp, pendulum_ang_vel, acc, act, self.reference, list(self.drone_params[i].values())))
             else:
-                obs = np.concatenate((pos, rpy, vel, ang_vel, acc, self.reference, list(self.drone_params[i].values())))
+                obs = np.concatenate((pos, rpy, vel, ang_vel, acc, act, self.reference, list(self.drone_params[i].values())))
             states.append(obs)  # add state to state list
         return states
 
