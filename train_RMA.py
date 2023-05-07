@@ -9,10 +9,21 @@ from models.PPO.RMA.RMA_model import RMA_full
 from environments.rewards import *
 from ray.rllib.models import ModelCatalog
 from custom_logging import MyCallbacks, custom_logger_creator
-from environments.ObservationWrappers import *
+from environments.observation_wrappers import *
 from distributions import MyBetaDist
 from ray.tune.result import DEFAULT_RESULTS_DIR
 from evaluation import load_policy_state
+
+
+def load_model_to_algo(algo, checkpoint, load_adaptation_module=False):
+    loaded_state = load_policy_state(checkpoint)
+    new_state_dict = algo.get_policy().model.state_dict()  # load state dict
+    for (ks, vs) in loaded_state['weights'].items():
+        if (not load_adaptation_module) and ('adaptation_module' in ks):  # skip adaptation module
+            continue
+        new_state_dict[ks].copy_(torch.from_numpy(vs))  # copy all other modules
+    algo.get_policy().model.load_state_dict(new_state_dict)
+    algo.workers.sync_weights()
 
 
 seed = 42
@@ -26,7 +37,7 @@ reward_fcn = distance_energy_reward
 
 # load checkpoint?
 checkpoint_dir = 'models/PPO/RMA/checkpoints/'  # directory where to look for checkpoints
-checkpoint_to_load = 'checkpoint_000050'  # saved checkpoint name
+checkpoint_to_load = 'checkpoint_000100'  # saved checkpoint name
 load_checkpoint = 1
 
 # setting the parameters
@@ -37,7 +48,7 @@ model_config = {
     "custom_model_config": {'num_states': 16,
                             'num_params': 6,
                             'num_actions': 4,
-                            'param_embed_dim': 32,
+                            'param_embed_dim': 8,
                             'train_adaptation': True,
                             'adapt_seq_len': 32
                             },
@@ -60,7 +71,7 @@ train_env_config['regen_env_at_steps'] = 1024  # regenerate simulation after 200
 train_env_config['max_steps'] = 1024
 train_env_config['train_vis'] = 1   # how many training windows to render and show
 train_env_config['seed'] = seed
-train_env_config['state_difficulty'] = 0.2
+train_env_config['state_difficulty'] = 0.3
 train_env_config['param_difficulty'] = 1
 
 # evaluation environment configuration
@@ -84,7 +95,7 @@ os.mkdir(logdir)  # create empty directory for logging
 # PPO configuration
 
 policy_training_config = PPOConfig() \
-    .training(gamma=0.985, lambda_=0.96, lr=0.0001, sgd_minibatch_size=train_batch_size//16, clip_param=0.2,
+    .training(gamma=0.985, lambda_=0.96, lr=0.00001, sgd_minibatch_size=train_batch_size//16, clip_param=0.2,
               train_batch_size=train_batch_size, model=model_config, num_sgd_iter=5, kl_coeff=0) \
     .resources(num_gpus=1) \
     .rollouts(num_rollout_workers=num_processes, rollout_fragment_length=rollout_length)\
@@ -99,16 +110,8 @@ policy_training_config = PPOConfig() \
 
 if __name__ == '__main__':
     policy_algo = policy_training_config.build()
-
-    loaded_state = load_policy_state(checkpoint_dir + checkpoint_to_load)
-    new_state_dict = policy_algo.get_policy().model.state_dict()  # load state dict
-    for (ks, vs) in loaded_state['weights'].items():
-        if 'adaptation_module' in ks:  # skip adaptation module
-            continue
-        new_state_dict[ks].copy_(torch.from_numpy(vs))  # copy all other modules
-    policy_algo.get_policy().model.load_state_dict(new_state_dict)
-    policy_algo.workers.sync_weights()
-
+    if load_checkpoint:
+        load_model_to_algo(policy_algo, checkpoint_dir + checkpoint_to_load, load_adaptation_module=False)
     train(policy_algo, 100, checkpoint_dir)
     policy_algo.stop()
 
