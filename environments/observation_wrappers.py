@@ -25,8 +25,9 @@ class GlobalFrameRPYEnv(BaseDroneEnv):
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             # acc = state[16:19]
-            # ref = state[19:23]
-            # params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            # params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)
             obs_i = np.concatenate([glob_ref_err, rpy[:2], heading_diff, vel, ang_vel, pendulum_rp, pendulum_ang_vel])
@@ -54,21 +55,98 @@ class LocalFramePRYEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             # acc = state[16:19]
-            # ref = state[19:23]
-            # params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            # params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
             R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), pendulum_rp[::-1], pendulum_ang_vel])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel, pendulum_rp[::-1], pendulum_ang_vel])
+            out_obs.append(obs_i)
+        return out_obs
+
+
+class LocalFrameFullStateEnv(BaseDroneEnv):
+    """Replaces global state observation with local drone frame relative states.
+    This includes reference, velocity and angular velocity in local drone frame as well as roll and pitch angles and
+    signed yaw angle difference with respect to the reference state. Then the acceleration and actuation states."""
+
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.num_states = 23
+        self.num_params = 0
+        num_obs = self.num_states + self.num_params
+        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(num_obs,), dtype=np.float64)
+
+    def _get_obs(self):
+        drone_states = super()._get_obs()
+        out_obs = []
+        for state in drone_states:
+            xyz = state[:3]
+            rpy = state[3:6]
+            yaw = rpy[2]
+            vel = state[6:9]
+            loc_ang_vel = state[9:12]
+            pendulum_rp = state[12:14]
+            pendulum_ang_vel = state[14:16]
+            acc = state[16:19]
+            act = state[19:23]
+            # ref = state[23:27]
+            # params = state[27:]
+            heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
+            glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
+            R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
+            loc_ref_err = R @ glob_ref_err  # reference direction in local frame
+            glob_vel = np.array(vel)[None].T
+            loc_vel = R @ glob_vel  # velocity in local frame
+            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel, acc, act, pendulum_rp[::-1], pendulum_ang_vel])
+            out_obs.append(obs_i)
+        return out_obs
+
+
+class LocalFrameFullStateZvecEnv(BaseDroneEnv):
+    """Replaces global state observation with local drone frame relative states.
+    This includes reference, velocity and angular velocity in local drone frame as well as roll and pitch angles and
+    signed yaw angle difference with respect to the reference state. Then the acceleration and actuation states."""
+
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.num_states = 23
+        self.num_params = 0
+        num_obs = self.num_states + self.num_params
+        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(num_obs,), dtype=np.float64)
+
+    def _get_obs(self):
+        drone_states = super()._get_obs()
+        out_obs = []
+        for state in drone_states:
+            xyz = state[:3]
+            rpy = state[3:6]
+            yaw = rpy[2]
+            vel = state[6:9]
+            loc_ang_vel = state[9:12]
+            pendulum_rp = state[12:14]
+            pendulum_ang_vel = state[14:16]
+            acc = state[16:19]
+            act = state[19:23]
+            # ref = state[23:27]
+            # params = state[27:]
+            DCM = mujoco_quat2DCM(mujoco_rpy2quat(np.append(rpy[:2], 0)))  # compute DCM from roll, pitch, 0
+            z_vec = DCM[:, 2]  # this is the direction of the z axis of the drone in the global frame rotated by yaw
+            heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
+            glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
+            R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
+            loc_ref_err = R @ glob_ref_err  # reference direction in local frame
+            glob_vel = np.array(vel)[None].T
+            loc_vel = R @ glob_vel  # velocity in local frame
+            obs_i = np.concatenate([loc_ref_err.squeeze(), z_vec, heading_diff, loc_vel.squeeze(), loc_ang_vel, acc, act, pendulum_rp[::-1], pendulum_ang_vel])
             out_obs.append(obs_i)
         return out_obs
 
@@ -94,22 +172,21 @@ class LocalFramePRYaccEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             acc = state[16:19]
-            # ref = state[19:23]
-            # params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            # params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
             R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
             obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(),
-                                    loc_ang_vel.squeeze(), pendulum_rp[::-1], pendulum_ang_vel, acc])
+                                    loc_ang_vel, acc, pendulum_rp[::-1], pendulum_ang_vel])
             out_obs.append(obs_i)
         return out_obs
 
@@ -135,21 +212,20 @@ class LocalFramePRYParamsEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             # acc = state[16:19]
-            # ref = state[19:23]
-            params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
             R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), pendulum_rp[::-1], pendulum_ang_vel, params])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel, pendulum_rp[::-1], pendulum_ang_vel, params])
             out_obs.append(obs_i)
         return out_obs
 
@@ -171,21 +247,20 @@ class LocalFramePRYaccParamsEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             acc = state[16:19]
-            # ref = state[19:23]
-            params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
             R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), pendulum_rp[::-1], acc, pendulum_ang_vel, params])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel, pendulum_rp[::-1], acc, pendulum_ang_vel, params])
             out_obs.append(obs_i)
         return out_obs
 
@@ -211,21 +286,20 @@ class LocalFrameRPYParamsEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             # acc = state[16:19]
-            # ref = state[19:23]
-            params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
             R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2], heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), pendulum_rp, pendulum_ang_vel, params])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2], heading_diff, loc_vel.squeeze(), loc_ang_vel, pendulum_rp, pendulum_ang_vel, params])
             out_obs.append(obs_i)
         return out_obs
 
@@ -251,11 +325,13 @@ class LocalFrameRPYFakeParamsEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             # acc = state[16:19]
-            # ref = state[19:23]
+            # act = state[19:23]
+            # ref = state[23:27]
+            # params = state[27:]
             params = [1, 0.17, 7, 0.01, 1.2, 0.3]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
@@ -263,9 +339,7 @@ class LocalFrameRPYFakeParamsEnv(BaseDroneEnv):
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2], heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), pendulum_rp, pendulum_ang_vel, params])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2], heading_diff, loc_vel.squeeze(), loc_ang_vel, pendulum_rp, pendulum_ang_vel, params])
             out_obs.append(obs_i)
         return out_obs
 
@@ -290,21 +364,20 @@ class LocalFrameRPYEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             # acc = state[16:19]
-            # ref = state[19:23]
-            # params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            # params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
             R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2], heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), pendulum_rp, pendulum_ang_vel])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2], heading_diff, loc_vel.squeeze(), loc_ang_vel, pendulum_rp, pendulum_ang_vel])
             out_obs.append(obs_i)
         return out_obs
 
@@ -327,19 +400,18 @@ class LocalFramePRYaccNoPendEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             acc = state[16:19]
-            # ref = state[19:23]
-            # params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            # params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
             R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), acc])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel, acc])
             out_obs.append(obs_i)
         return out_obs
 
@@ -362,19 +434,18 @@ class LocalFramePRYaccParamsNoPendEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
-            acc = state[16:19]
-            # ref = state[19:23]
-            params = state[23:]
+            loc_ang_vel = state[9:12]
+            # acc = state[16:19]
+            # act = state[19:23]
+            # ref = state[23:27]
+            params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
             R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), acc, params])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), rpy[:2][::-1], heading_diff, loc_vel.squeeze(), loc_ang_vel, acc, params])
             out_obs.append(obs_i)
         return out_obs
 
@@ -399,12 +470,13 @@ class LocalFrameRmParamsEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             # acc = state[16:19]
-            # ref = state[19:23]
-            params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             glob_ref_err = np.array(self.reference[:3] - xyz)[None].T
             R = mujoco_quat2DCM(mujoco_rpy2quat(rpy)).T
@@ -412,9 +484,7 @@ class LocalFrameRmParamsEnv(BaseDroneEnv):
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), Rm.flatten(), loc_vel.squeeze(), loc_ang_vel.squeeze(), pendulum_rp, pendulum_ang_vel, params])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), Rm.flatten(), loc_vel.squeeze(), loc_ang_vel, pendulum_rp, pendulum_ang_vel, params])
             out_obs.append(obs_i)
         return out_obs
 
@@ -439,12 +509,13 @@ class LocalFrameZvecEnv(BaseDroneEnv):
             rpy = state[3:6]
             yaw = rpy[2]
             vel = state[6:9]
-            ang_vel = state[9:12]
+            loc_ang_vel = state[9:12]
             pendulum_rp = state[12:14]
             pendulum_ang_vel = state[14:16]
             # acc = state[16:19]
-            # ref = state[19:23]
-            params = state[23:]
+            # act = state[19:23]
+            # ref = state[23:27]
+            # params = state[27:]
             heading_diff = np.array((self.reference[3] - yaw + np.pi) % (2 * np.pi) - np.pi)[None]  # yaw signed difference
             DCM = mujoco_quat2DCM(mujoco_rpy2quat(np.append(rpy[:2], 0)))  # compute DCM from roll, pitch, 0
             z_vec = DCM[:, 2]  # this is the direction of the z axis of the drone in the global frame rotated by yaw
@@ -453,8 +524,6 @@ class LocalFrameZvecEnv(BaseDroneEnv):
             loc_ref_err = R @ glob_ref_err  # reference direction in local frame
             glob_vel = np.array(vel)[None].T
             loc_vel = R @ glob_vel  # velocity in local frame
-            glob_ang_vel = np.array(ang_vel)[None].T
-            loc_ang_vel = R @ glob_ang_vel
-            obs_i = np.concatenate([loc_ref_err.squeeze(), z_vec, heading_diff, loc_vel.squeeze(), loc_ang_vel.squeeze(), pendulum_rp, pendulum_ang_vel])
+            obs_i = np.concatenate([loc_ref_err.squeeze(), z_vec, heading_diff, loc_vel.squeeze(), loc_ang_vel, pendulum_rp, pendulum_ang_vel])
             out_obs.append(obs_i)
         return out_obs
