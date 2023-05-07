@@ -19,7 +19,7 @@ dist = MyBetaDist
 num_drones = 256
 
 checkpoint_dir = 'models/PPO/RMA/checkpoints/'  # directory where to look for checkpoints
-checkpoint_to_load = 'checkpoint_000050'  # saved checkpoint name
+checkpoint_to_load = 'checkpoint_000100'  # saved checkpoint name
 load_checkpoint = 1
 
 
