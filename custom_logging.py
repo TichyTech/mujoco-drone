@@ -47,10 +47,10 @@ class MyCallbacks(DefaultCallbacks):
             else:
                 result['grad_norm_l%d_%s' % (i, n)] = 0
 
-        z = policy.model.z.cpu().numpy()
-        for i in range(policy.model.param_embed_dim):
-            result['z_var_%d' % i] = np.var(z[:, i])
-            result['z_mean_%d' % i] = np.mean(z[:, i])
+        # z = policy.model.z.cpu().detach().numpy()
+        # for i in range(policy.model.param_embed_dim):
+        #     result['z_var_%d' % i] = np.var(z[:, i])
+        #     result['z_mean_%d' % i] = np.mean(z[:, i])
 
 
 def custom_logger_creator(logdir):
