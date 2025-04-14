@@ -2,7 +2,7 @@
 
 This is code for my [Master thesis](https://dspace.cvut.cz/handle/10467/108688) in Cybernetics and Robotics course at [Faculty of Electrical Engineering](https://fel.cvut.cz/cs) at [Czech Technical University in Prague](https://www.cvut.cz/en/).
 
-The main goal was to teach a quadcopter with hanging load how to fly using an artificial neural network via reinforcement learning. This is all done inside a physics simulator [MuJoCo](https://mujoco.readthedocs.io/), since the training algorithm needs a lot of samples to converge, which is impractical to achieve on a real system. 
+The main goal was to teach a quadcopter with hanging load how to fly using an artificial neural network via reinforcement learning. This is all done inside a physics simulator [MuJoCo](https://mujoco.readthedocs.io/), since the training algorithm needs a lot of samples to converge, which is impractical to achieve on a real system. [Rllib](https://docs.ray.io/en/latest/rllib/index.html) is used as a training backend for efficient parallelized training of a [PyTorch](https://pytorch.org/) Neural Network policy.
 
 The resulting neural network policy is able to stabilize the quadcopter on a reference position from any initial state.
 
