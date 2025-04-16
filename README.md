@@ -6,19 +6,27 @@ The main goal was to teach a quadcopter with hanging load how to fly using an ar
 
 The resulting neural network policy is able to stabilize the quadcopter on a reference position from any initial state.
 
- ![SimplePolicySimpleModel](https://github.com/user-attachments/assets/a30c0b10-486a-403f-82b0-1ea8fb5c54c3)
+<div align="center">
+<img src="https://github.com/user-attachments/assets/a30c0b10-486a-403f-82b0-1ea8fb5c54c3" alt="SimplePolicySimpleModel" width="640"/>
+</div>
 
 Or even follow a moving reference point.
 
- ![MLPcut](https://github.com/user-attachments/assets/a82e0308-c507-4f06-9cf9-5e546e8bb46f)
+<div align="center">
+<img src="https://github.com/user-attachments/assets/a82e0308-c507-4f06-9cf9-5e546e8bb46f" alt="MLPcut" width="640"/>
+</div>
 
 Further experiments have also dealt with robustness of the controller under changing system parameters such as weight of the quadcopter or weight of the load.
 
- ![Adapt](https://github.com/user-attachments/assets/2e6e5d97-2a4a-4a32-83dc-278f4a9d5126)
+<div align="center">
+<img src="https://github.com/user-attachments/assets/2e6e5d97-2a4a-4a32-83dc-278f4a9d5126" alt="Adapt" width="640"/>
+</div>
 
 And finally I used an LSTM network to estimate the load state (Visualized by green ball).
 
- ![StateEst](https://github.com/user-attachments/assets/22845642-7fb9-4592-b4ea-61dc3d7d98d6)
+<div align="center">
+<img src="https://github.com/user-attachments/assets/22845642-7fb9-4592-b4ea-61dc3d7d98d6" alt="StateEst" width="640"/>
+</div>
 
 ## Instructions for simple mujoco environment:
  - install the modules using the following commands:
