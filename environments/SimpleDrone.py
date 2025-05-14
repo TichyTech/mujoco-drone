@@ -1,7 +1,7 @@
 import numpy as np
 from gymnasium import utils
 from .mujoco_env_custom import extendedEnv
-from .env_gen import make_arena, mjcf_to_mjmodel
+from .env_gen import make_sim, mjcf_to_mjmodel
 from gymnasium.spaces import Box
 from scipy.spatial.transform import Rotation as R
 from typing import Optional
@@ -22,7 +22,8 @@ class SimpleDrone(extendedEnv, utils.EzPickle):
         utils.EzPickle.__init__(self, **kwargs)
         width, height = 640, 480
         self.num_drones = num_drones
-
+        self.window_title = "test"
+        
         self.reference = reference
         if start_pos is None:
             self.start_pos = self.reference[:3]
@@ -38,11 +39,11 @@ class SimpleDrone(extendedEnv, utils.EzPickle):
 
         observation_space = Box(low=-np.inf, high=np.inf, shape=(self.num_drones*6, ), dtype=np.float64)
         self.action_space = Box(low=0.5, high=1, shape=(self.num_drones * 4,), dtype=np.float64)
-        model = mjcf_to_mjmodel(make_arena([None]*self.num_drones))
+        model = mjcf_to_mjmodel(make_sim([{}]*self.num_drones))
         extendedEnv.__init__(
             self,
             model,
-            4,
+            2,
             observation_space=observation_space,
             width=width,
             height=height,
