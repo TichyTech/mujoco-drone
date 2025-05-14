@@ -51,5 +51,5 @@ pip install gym[mujoco]==0.26.2
 pip install numpy matplotlib dm_control
 ```
  - install pytorch with gpu support: <https://pytorch.org/get-started/locally/>
- - run ```python train_PPO_MLP.py``` to start training
+ - run ```python train_PPO.py``` to start training
  - run ```tensorboard --logdir=~/ray_results``` to monitor the training progress
